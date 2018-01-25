@@ -1,5 +1,5 @@
-from .base import SObject
-from .sthpw import Snapshot, File
+from ..base import SObject
+# from ..sthpw import Snapshot, File
 
 
 class Asset(SObject):
@@ -7,7 +7,7 @@ class Asset(SObject):
 
 
 class ProductionElement(SObject):
-    pass
+    '''Production Element Class'''
 
 
 class Episode(ProductionElement):
@@ -19,11 +19,12 @@ class Sequence(ProductionElement):
 
 
 class Shot(ProductionElement):
-    __stype__ = 'vfx/sequence'
+    __stype__ = 'vfx/shot'
 
 
 class ProductionAsset(SObject):
-    pass
+    asset = None
+    production = None
 
 
 class AssetInEpisode(ProductionAsset):
@@ -40,11 +41,3 @@ class AssetInShot(ProductionAsset):
 
 class Texture(SObject):
     __stype__ = 'vfx/texture'
-
-
-class Preview(File):
-    pass
-
-
-class Cache(object):
-    pass
