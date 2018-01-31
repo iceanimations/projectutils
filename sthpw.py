@@ -1,4 +1,4 @@
-from .base import SObject, _Project
+from .base import SObject
 
 
 __all__ = ['Snapshot', 'File', 'Task', 'Project', 'Login', 'LoginGroup',

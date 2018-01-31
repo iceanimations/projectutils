@@ -1,4 +1,4 @@
-from .sobject import *
+from .sobjects import *
 
 
 class Preview(object):
