@@ -3,7 +3,6 @@ import types
 
 
 _server = None
-_user = None
 
 
 def set_server(server):
@@ -11,34 +10,60 @@ def set_server(server):
     _server = server
 
 
-def set_user(user):
-    global _user
-    _user = user
-
-
-def get_user():
-    return _user
-
-
 def get_server():
     return _server
 
 
-class ProjectServer(USER.TacticServer):
+class TacticObjectServerMeta(USER.TacticServerMeta):
+    '''Wraps Return Calls TacticServerMeta from wrapping the objects again'''
+
+    @classmethod
+    def _wrap(mcls, func):
+
+        # TODO: how to wrap other attrs such as project_code
+
+        func_name = func.__name__
+
+        def _object_wrapper(self, *args, **kwargs):
+
+            real_func = getattr(self.real_server, func_name)
+
+            result = real_func(*args, **kwargs)
+            if TacticObjectServer.is_sobj_dict(result):
+                result = TacticObjectServer.wrap_sobject_class(
+                        result, self)
+            elif isinstance(result, list) and all(
+                    (True if TacticObjectServer.is_sobj_dict(member)
+                        else False for member in result)):
+                result = [TacticObjectServer.wrap_sobject_class(mem, self)
+                          for mem in result]
+            return result
+        _object_wrapper.__name__ = func_name
+        _object_wrapper.__doc__ = func.__doc__
+
+        return _object_wrapper
+
+
+class TacticObjectServer(USER.TacticServer):
+    __metaclass__ = TacticObjectServerMeta
 
     _sobject_classes = {}
 
-    def __init__(self, A, *args, **kwargs):
-        self.server = A.server
+    def __new__(cls, obj, *args, **kwargs):
+        new_obj = super(TacticObjectServer, cls).__new__(cls, *args, **kwargs)
+        new_obj.real_server = obj
+        return new_obj
 
     def create_copy(self):
-        return ProjectServer(USER.get_server_copy())
+        return TacticObjectServer(USER.get_server_copy())
 
     @classmethod
     def register_sobject_class(cls, sobj_cls):
         stype = getattr(sobj_cls, '__stype__', None)
         if isinstance(stype, basestring):
             cls._sobject_classes[stype] = sobj_cls
+            setattr(cls, sobj_cls.__name__, sobj_cls)
+            print cls, sobj_cls.__name__, sobj_cls, stype
 
     @classmethod
     def get_sobject_class(self, stype):
@@ -51,7 +76,7 @@ class ProjectServer(USER.TacticServer):
 
     @classmethod
     def wrap_sobject_class(cls, sobject, conn=None):
-        stype = ProjectServer.get_stype(sobject)
+        stype = TacticObjectServer.get_stype(sobject)
         sobject_class = cls.get_sobject_class(stype)
         if sobject_class is None:
             sobject_class = cls.get_sobject_class('*')
@@ -80,22 +105,6 @@ class ProjectServer(USER.TacticServer):
     def is_sobj_dict(d):
         return isinstance(d, dict) and '__search_key__' in d
 
-    def __getattr__(self, name):
-        attr = super(ProjectServer, self).__getattr__(name)
-        if isinstance(attr, types.FunctionType):
-            def _another_wrapper(*args, **kwargs):
-                result = attr(*args, **kwargs)
-                if ProjectServer.is_sobj_dict(result):
-                    result = ProjectServer.wrap_sobject_class(result, self)
-                elif isinstance(result, list) and all(
-                        (True if ProjectServer.is_sobj_dict(member)
-                            else False for member in result)):
-                    result = [ProjectServer.wrap_sobject_class(mem, self)
-                              for mem in result]
-                return result
-            return _another_wrapper
-        return attr
-
 
 class Connection(object):
 
@@ -113,11 +122,4 @@ class Connection(object):
         else:
             obj._conn = value
 
-try:
-    from auth import user as USER
-    set_user(USER.get_user())
-    set_server(ProjectServer(USER.get_server()))
-except Exception as e:
-    _user = None
-    from auth import user as USER
-    set_server(ProjectServer(USER.TacticServer(setup=False)))
+set_server(TacticObjectServer(USER.get_server()))

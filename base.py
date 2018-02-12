@@ -8,7 +8,7 @@ class SObjectMeta(ABCMeta):
 
     def __new__(mcls, name, bases, namespace):
         cls = super(SObjectMeta, mcls).__new__(mcls, name, bases, namespace)
-        _server.ProjectServer.register_sobject_class(cls)
+        _server.TacticObjectServer.register_sobject_class(cls)
         return cls
 
 
@@ -21,8 +21,8 @@ class RelatedSObject(object):
         self.__show_retired__ = show_retired
 
     def __get__(self, obj, cls):
-        return obj.conn.eval('@SOBJECT(%s[code, %s].%s)' % (
-            obj.search_type, obj.code, self.__stype__))
+        return obj.conn.eval('@SOBJECT(%s[id, %s].%s)' % (
+            obj.search_type, obj.id, self.__stype__))
 
 
 class ParentSObject(RelatedSObject):
@@ -57,6 +57,7 @@ class SObjectField(object):
         self.__force__ = force
 
     def __get__(self, obj, cls):
+        ''':retval: str'''
         if self.__key__ in obj.__data__:
             return obj.__data__[self.__key__]
         elif self.__force__ and self.__key__ in obj.conn.get_column_names(
@@ -150,7 +151,7 @@ class SObject(object):
     @classmethod
     def get_by_search_key(cls, search_key):
         data = cls.conn.get_by_search_key(search_key)
-        _server.ProjectServer.wrap_sobject_class(data, cls.conn)
+        _server.TacticObjectServer.wrap_sobject_class(data, cls.conn)
 
     @classmethod
     def get_unique_sobject(cls):
@@ -179,6 +180,6 @@ class SObject(object):
 class UnknownSObject(SObject):
     __stype__ = '*'
 
-    def __init__(self, data, server=None):
-        self.__stype__ = _server.ProjectServer.get_stype(data)
-        super(UnknownSObject, self).__init__(data, server)
+    def __init__(self, data, conn=None):
+        self.__stype__ = _server.TacticObjectServer.get_stype(data)
+        super(UnknownSObject, self).__init__(data, conn)
