@@ -7,6 +7,14 @@ class SObjectMeta(ABCMeta):
     subclasses = dict()
 
     def __new__(mcls, name, bases, namespace):
+        for _name, _member in namespace.copy().items():
+            if isinstance(_member, FuncOverride):
+                def _wrapper(self, *args, **kwargs):
+                    return _member.func(
+                            self.conn, self.search_key, *args, **kwargs)
+                _wrapper.__name__ = _name
+                _wrapper.__doc__ = _member.func.__doc__
+                namespace[_name] = _wrapper
         cls = super(SObjectMeta, mcls).__new__(mcls, name, bases, namespace)
         _server.TacticObjectServer.register_sobject_class(cls)
         return cls
@@ -22,7 +30,7 @@ class RelatedSObject(object):
 
     def __get__(self, obj, cls):
         return obj.conn.eval('@SOBJECT(%s[id, %s].%s)' % (
-            obj.search_type, obj.id, self.__stype__))
+            obj.__stype__, obj.id, self.__stype__))
 
 
 class ParentSObject(RelatedSObject):
@@ -33,8 +41,10 @@ class ParentSObject(RelatedSObject):
         self.__key__ = key
 
     def __get__(self, obj, cls):
-        return obj.conn.get_parent(
-                self.__stype__, obj.search_key, self.__show_retired__)
+        return self.conn.query(
+                self.__stype__,
+                filters=[('code', obj.get_field(self.__key__))],
+                show_retired=self.__show_retired__, single=True)
 
     def __set__(self, obj, value):
         if isinstance(value, SObject):
@@ -45,7 +55,7 @@ class ParentSObject(RelatedSObject):
 class ChildSObject(RelatedSObject):
 
     def __get__(self, obj, cls):
-        return obj.conn.get_all_children(obj.search_key, self.__stype__)
+        return obj.conn.eval('@SOBJECT(%s)' % self.__stype__, obj.search_key)
 
 
 class SObjectField(object):
@@ -68,6 +78,13 @@ class SObjectField(object):
                 self.__key__, obj.__stype__))
 
 
+class FuncOverride(object):
+    func = None
+
+    def __init__(self, func):
+        self.func = func
+
+
 class SObject(object):
     __metaclass__ = SObjectMeta
     conn = _server.Connection()
@@ -75,12 +92,12 @@ class SObject(object):
 
     search_key = SObjectField('__search_key__')
     code = SObjectField('code', True)
-    description = SObjectField('description')
+    description = SObjectField('description', True)
     id = SObjectField('id', True)
     name = SObjectField('name', True)
-    retire_status = SObjectField('retire_status')
-    status = SObjectField('status')
-    timestamp = SObjectField('timestamp')
+    retire_status = SObjectField('retire_status', True)
+    status = SObjectField('status', True)
+    timestamp = SObjectField('timestamp', True)
 
     snapshots = ChildSObject('sthpw/snapshot')
     tasks = ChildSObject('sthpw/task')
@@ -89,13 +106,17 @@ class SObject(object):
         self.conn = conn
         stype, code = self.conn.split_search_key(data['__search_key__'])
         stype = stype.split('?')[0]
-        if stype == self.search_type:
-            self.__data__ = data
+        self.__data__ = data
+        if stype == self.__stype__:
+            self.__data__ = {
+                    key: value if value is not None else ''
+                    for key, value in data.items()}
         else:
             raise TypeError(
                     'provided data does not refer to an %s object' %
-                    self.search_type)
+                    self.__stype__)
 
+    @abstractproperty
     def __stype__(self):
         pass
 
@@ -104,12 +125,21 @@ class SObject(object):
         return self.__class__.__name__ + "({'__search_key__': '%s'})" % skey
 
     @property
-    def search_type(cls):
-        return cls.__stype__
+    def data(self):
+        return self.__data__
 
-    def delete(self, include_dependencies=False):
-        self.conn.delete_sobject(
-                self.search_type(), include_dependencies=include_dependencies)
+    def get_field(self, key):
+        return self.__data__[key]
+
+    def set_field(self, key, value):
+        self.__data__[key] = value
+
+    # def __getattr__(self, name):
+        # try:
+            # self.__data__[name]
+        # except KeyError:
+            # raise AttributeError("'%s' object has no attribute '%s'" % (
+                # self.__class__.__name__, name))
 
     @classmethod
     def query(cls, filters=[], columns=[], order_bys=[], show_retired=False,
@@ -129,24 +159,9 @@ class SObject(object):
     def fast_query(cls, filters=[], limit=None):
         return cls.conn.fast_query(cls.__stype__, filters=filters, limit=None)
 
-    def get_all_children(self, child_type):
-        return self.conn.update(self.search_key, child_type)
-
-    def update(self, args, **kwargs):
-        return self.conn.update(self.search_key, include_dependencies=False)
-
-    def insert(self, metadata={}, parent_key=None, info={}, use_id=False,
-               triggers=True):
-        return self.conn.insert(
-                self.search_type, self.__data__, metadata=metadata,
-                parent_key=parent_key, info=info, use_id=use_id,
-                triggers=triggers)
-
     @classmethod
     def get_by_code(cls, code):
-        data = cls.server.get_by_code(cls.search_type, code)
-        if data:
-            return cls(data, server=cls.server)
+        return cls.conn.get_by_code(cls.__stype__, code)
 
     @classmethod
     def get_by_search_key(cls, search_key):
@@ -155,31 +170,46 @@ class SObject(object):
 
     @classmethod
     def get_unique_sobject(cls):
-        return cls(cls.server.get_unique_sobject(cls.search_type()))
+        return cls(cls.conn.get_unique_sobject(cls.__stype__))
 
     def insert_update(self, metadata={}, parent_key=None, info={},
                       use_id=False, triggers=False):
-        data = self.conn.insert_update(
+        obj = self.conn.insert_update(
                 self.search_key, self.__data__, metadata=metadata,
                 parent_key=None, info=info, use_id=use_id, triggers=False)
-        self.__data__ = data
+        self.__data__ = obj.__data__
+        return obj
+    insert_update.__doc__ = _server.TacticObjectServer.insert_update.__doc__
 
-    def retire(self):
-        return self.conn.retire_sobject(self.search_key)
+    def insert(self, *args, **kwargs):
+        return self.conn.insert(
+                self.search_key, self.__data__, *args, **kwargs)
+    insert.__doc__ = _server.TacticObjectServer.insert.__doc__
 
-    def reactivate(self):
-        return self.conn.reactivate_object(self.search_key)
+    def update(self, *args, **kwargs):
+        return self.conn.update(
+                self.search_key, self.__data__, *args, **kwargs)
+    update.__doc__ = _server.TacticObjectServer.update.__doc__
 
-    def get_field(self, key):
-        return self.__data__[key]
-
-    def set_field(self, key, value):
-        self.__data__[key] = value
+    reactivate = FuncOverride(_server.TacticObjectServer.reactivate_sobject)
+    retire = FuncOverride(_server.TacticObjectServer.retire_sobject)
+    update = FuncOverride(_server.TacticObjectServer.update)
+    delete = FuncOverride(_server.TacticObjectServer.delete_sobject)
+    simple_checkin = FuncOverride(_server.TacticObjectServer.simple_checkin)
+    group_checkin = FuncOverride(_server.TacticObjectServer.group_checkin)
+    directory_checkin = FuncOverride(
+            _server.TacticObjectServer.directory_checkin)
+    checkout = FuncOverride(_server.TacticObjectServer.checkout)
+    get_snapshot = FuncOverride(_server.TacticObjectServer.get_snapshot)
+    get_parent = FuncOverride(_server.TacticObjectServer.get_parent)
+    get_all_children = FuncOverride(
+            _server.TacticObjectServer.get_all_children)
 
 
 class UnknownSObject(SObject):
     __stype__ = '*'
 
-    def __init__(self, data, conn=None):
-        self.__stype__ = _server.TacticObjectServer.get_stype(data)
-        super(UnknownSObject, self).__init__(data, conn)
+    def __new__(cls, data, conn=None):
+        self = super(UnknownSObject, cls).__new__(cls, data, conn)
+        self.__stype__ = cls.conn.get_stype(data)
+        return self

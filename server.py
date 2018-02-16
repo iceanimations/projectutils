@@ -63,7 +63,6 @@ class TacticObjectServer(USER.TacticServer):
         if isinstance(stype, basestring):
             cls._sobject_classes[stype] = sobj_cls
             setattr(cls, sobj_cls.__name__, sobj_cls)
-            print cls, sobj_cls.__name__, sobj_cls, stype
 
     @classmethod
     def get_sobject_class(self, stype):
@@ -104,6 +103,9 @@ class TacticObjectServer(USER.TacticServer):
     @staticmethod
     def is_sobj_dict(d):
         return isinstance(d, dict) and '__search_key__' in d
+
+    def __getattr__(self, name):
+        return getattr(self.real_server, name)
 
 
 class Connection(object):
