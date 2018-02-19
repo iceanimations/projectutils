@@ -41,7 +41,7 @@ class ParentSObject(RelatedSObject):
         self.__key__ = key
 
     def __get__(self, obj, cls):
-        return self.conn.query(
+        return obj.conn.query(
                 self.__stype__,
                 filters=[('code', obj.get_field(self.__key__))],
                 show_retired=self.__show_retired__, single=True)
@@ -62,7 +62,7 @@ class SObjectField(object):
     __key__ = None
     __force__ = False
 
-    def __init__(self, key, force=False):
+    def __init__(self, key, force=True):
         self.__key__ = key
         self.__force__ = force
 
@@ -134,13 +134,6 @@ class SObject(object):
     def set_field(self, key, value):
         self.__data__[key] = value
 
-    # def __getattr__(self, name):
-        # try:
-            # self.__data__[name]
-        # except KeyError:
-            # raise AttributeError("'%s' object has no attribute '%s'" % (
-                # self.__class__.__name__, name))
-
     @classmethod
     def query(cls, filters=[], columns=[], order_bys=[], show_retired=False,
               limit=None, offset=None, single=False):
@@ -172,6 +165,15 @@ class SObject(object):
     def get_unique_sobject(cls):
         return cls(cls.conn.get_unique_sobject(cls.__stype__))
 
+    @classmethod
+    def get_column_names(cls):
+        return cls.conn.get_column_names(cls.__stype__)
+
+    def connect_sobject(self, dest, context='default'):
+        return self.conn.connect_sobjects(
+                self.search_key, dest.search_key, context)
+    connect_sobject.__doc__ = _server.TacticObjectServer.__doc__
+
     def insert_update(self, metadata={}, parent_key=None, info={},
                       use_id=False, triggers=False):
         obj = self.conn.insert_update(
@@ -191,19 +193,32 @@ class SObject(object):
                 self.search_key, self.__data__, *args, **kwargs)
     update.__doc__ = _server.TacticObjectServer.update.__doc__
 
-    reactivate = FuncOverride(_server.TacticObjectServer.reactivate_sobject)
-    retire = FuncOverride(_server.TacticObjectServer.retire_sobject)
-    update = FuncOverride(_server.TacticObjectServer.update)
-    delete = FuncOverride(_server.TacticObjectServer.delete_sobject)
-    simple_checkin = FuncOverride(_server.TacticObjectServer.simple_checkin)
-    group_checkin = FuncOverride(_server.TacticObjectServer.group_checkin)
+    reactivate = FuncOverride(
+            _server.TacticObjectServer.reactivate_sobject)
+    retire = FuncOverride(
+            _server.TacticObjectServer.retire_sobject)
+    update = FuncOverride(
+            _server.TacticObjectServer.update)
+    delete = FuncOverride(
+            _server.TacticObjectServer.delete_sobject)
+    simple_checkin = FuncOverride(
+            _server.TacticObjectServer.simple_checkin)
+    group_checkin = FuncOverride(
+            _server.TacticObjectServer.group_checkin)
     directory_checkin = FuncOverride(
             _server.TacticObjectServer.directory_checkin)
-    checkout = FuncOverride(_server.TacticObjectServer.checkout)
-    get_snapshot = FuncOverride(_server.TacticObjectServer.get_snapshot)
-    get_parent = FuncOverride(_server.TacticObjectServer.get_parent)
+    checkout = FuncOverride(
+            _server.TacticObjectServer.checkout)
+    get_snapshot = FuncOverride(
+            _server.TacticObjectServer.get_snapshot)
+    get_parent = FuncOverride(
+            _server.TacticObjectServer.get_parent)
     get_all_children = FuncOverride(
             _server.TacticObjectServer.get_all_children)
+    get_connected_sobject = FuncOverride(
+            _server.TacticObjectServer.get_connected_sobject)
+    get_connected_sobjects = FuncOverride(
+            _server.TacticObjectServer.get_connected_sobjects)
 
 
 class UnknownSObject(SObject):

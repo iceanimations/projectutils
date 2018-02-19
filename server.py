@@ -1,5 +1,4 @@
 from auth import user as USER
-import types
 
 
 _server = None

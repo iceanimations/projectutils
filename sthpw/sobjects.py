@@ -5,14 +5,35 @@ __all__ = ['Snapshot', 'File', 'Task', 'Project', 'Login', 'LoginGroup',
            'LoginInGroup']
 
 
-class Snapshot(base.SObject):
+class ProjectRelatedSObject(base.SObject):
+    project = base.ParentSObject('sthpw/project', 'project_code')
+
+
+class UserRelatedSObject(base.SObject):
+    user = base.ParentSObject('sthpw/login', 'login')
+
+
+class NonProjectSObject(base.SObject):
+
+    @property
+    def parent_search_key(self):
+        return self.conn.build_search_key(
+                self.__stype__, self.code,
+                self.project_code if self.project_code else None)
+
+    @property
+    def parent_sobject(self):
+        self.conn.get_by_search_key(self.parent_search_key)
+
+
+class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     __stype__ = 'sthpw/snapshot'
 
     context = base.SObjectField('context', True)
     snapshot_type = base.SObjectField('snapshot_type', True)
     is_synced = base.SObjectField('is_synced', True)
     process = base.SObjectField('process', True)
-    project_code = base.SObjectField('process', True)
+    project_code = base.SObjectField('project_code', True)
     lock_date = base.SObjectField('lock_data', True)
     is_latest = base.SObjectField('is_latest', True)
     revision = base.SObjectField('revision', True)
@@ -35,11 +56,11 @@ class Snapshot(base.SObject):
     login = base.SObjectField('login', True)
     column_name = base.SObjectField('column_name', True)
 
+    lock_user = base.ParentSObject('sthpw/login', 'lock_login')
     files = base.ChildSObject('sthpw/file')
-    project = base.ParentSObject('sthpw/project', 'project_code')
 
 
-class File(base.SObject):
+class File(NonProjectSObject, ProjectRelatedSObject):
     __stype__ = 'sthpw/file'
 
     snapshot = base.ParentSObject('sthpw/snapshot', 'snapshot_code')
@@ -69,13 +90,18 @@ class File(base.SObject):
         return self.conn.get_parent(self.search_key)
 
 
-class Task(base.SObject):
+class Milestone(ProjectRelatedSObject):
+    __stype__ = 'sthpw/milestone'
+
+    project_code = base.SObjectField('project_code', True)
+    due_date = base.SObjectField('due_date', True)
+
+
+class Task(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     __stype__ = 'sthpw/task'
 
     bid_cost = base.SObjectField('bid_cost')
-    supervisor = base.SObjectField('supervisor')
     process = base.SObjectField('process')
-    assigned = base.SObjectField('assigned')
     bid_end_date = base.SObjectField('bid_end_date')
     client_version = base.SObjectField('client_version')
     project_code = base.SObjectField('project_code')
@@ -106,6 +132,43 @@ class Task(base.SObject):
     context = base.SObjectField('context')
     velocity = base.SObjectField('velocity')
     actual_duration = base.SObjectField('actual_duration')
+    supervisor = base.SObjectField('supervisor')
+    assigned = base.SObjectField('assigned')
+
+    supervisor_user = base.ParentSObject('sthpw/login', 'supervisor')
+    assigned_user = base.ParentSObject('sthpw/login', 'assigned')
+    milestone = base.ParentSObject('sthpw/milestone', 'milestone_code')
+
+
+class Pipeline(ProjectRelatedSObject):
+    pipeline = base.SObjectField('pipeline')
+    search_type = base.SObjectField('search_type')
+    project_code = base.SObjectField('project_code')
+    description = base.SObjectField('description')
+    color = base.SObjectField('color')
+    autocreate_tasks = base.SObjectField('autocreate_tasks')
+    parent_process = base.SObjectField('parent_process')
+
+
+class WorkHour(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
+    __stype__ = 'sthpw/work_hour'
+
+    project_code = base.SObjectField('project_code')
+    description = base.SObjectField('description')
+    category = base.SObjectField('category')
+    login = base.SObjectField('login')
+    day = base.SObjectField('day')
+    start_time = base.SObjectField('start_time')
+    end_time = base.SObjectField('end_time')
+    straight_time = base.SObjectField('straight_time')
+    over_time = base.SObjectField('over_time')
+    search_type = base.SObjectField('search_type')
+    search_id = base.SObjectField('search_id')
+    task_code = base.SObjectField('task_code')
+    overtime = base.SObjectField('overtime')
+    status = base.SObjectField('status')
+    process = base.SObjectField('process')
+    search_code = base.SObjectField('search_code')
 
 
 class Project(base.SObject):
@@ -183,7 +246,7 @@ class Login(base.SObject):
         return self.conn.Project.query(filters=filters)
 
 
-class LoginGroup(base.SObject):
+class LoginGroup(ProjectRelatedSObject):
     __stype__ = 'sthpw/login_group'
 
     login_in_groups = base.ChildSObject('sthpw/login_group')
@@ -210,3 +273,40 @@ class LoginInGroup(base.SObject):
 
     login = base.ParentSObject('sthpw/login', 'login')
     login_group = base.ParentSObject('sthpw/login_group', 'login_group')
+
+
+class StatusLog(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
+    search_type = base.SObjectField('search_type')
+    search_id = base.SObjectField('search_id')
+    status = base.SObjectField('status')
+    to_status = base.SObjectField('to_status')
+    from_status = base.SObjectField('from_status')
+    project_code = base.SObjectField('project_code')
+    search_code = base.SObjectField('search_code')
+    login = base.SObjectField('login')
+
+
+class Connection(ProjectRelatedSObject):
+    context = base.SObjectField('context')
+    project_code = base.SObjectField('project_code')
+    src_search_type = base.SObjectField('src_search_type')
+    src_search_id = base.SObjectField('src_search_id')
+    dst_search_type = base.SObjectField('dst_search_type')
+    dst_search_id = base.SObjectField('dst_search_id')
+    login = base.SObjectField('login')
+
+    @property
+    def src_sobject(self):
+        skey = self.conn.build_search_key(
+                self.src_search_type, self.src_search_id,
+                project_code=self.project_code if self.project_code else None,
+                column='id')
+        return self.conn.get_by_search_key(skey)
+
+    @property
+    def dst_sobject(self):
+        skey = self.conn.build_search_key(
+                self.dst_search_type, self.dst_search_id,
+                project_code=self.project_code if self.project_code else None,
+                column='id')
+        return self.conn.get_by_search_key(skey)
