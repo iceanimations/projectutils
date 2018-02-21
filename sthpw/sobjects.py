@@ -7,6 +7,7 @@ class ProjectRelatedSObject(base.SObject):
 
 class UserRelatedSObject(base.SObject):
     user = base.ParentSObject('sthpw/login', 'login')
+    login = base.SObjectField('login', True)
 
 
 class NonProjectSObject(base.SObject):
@@ -49,7 +50,6 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     search_type = base.SObjectField('search_type', True)
     snapshot = base.SObjectField('snapshot', True)
     context = base.SObjectField('context', True)
-    login = base.SObjectField('login', True)
     column_name = base.SObjectField('column_name', True)
 
     lock_user = base.ParentSObject('sthpw/login', 'lock_login')
@@ -119,7 +119,6 @@ class Task(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     efficiency = base.SObjectField('efficiency')
     search_code = base.SObjectField('search_code')
     data_ = base.SObjectField('data_')
-    login = base.SObjectField('login')
     actual_quantity = base.SObjectField('actual_quantity')
     depend_id = base.SObjectField('depend_id')
     bid_duration = base.SObjectField('bid_duration')
@@ -142,7 +141,6 @@ class WorkHour(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     project_code = base.SObjectField('project_code')
     description = base.SObjectField('description')
     category = base.SObjectField('category')
-    login = base.SObjectField('login')
     day = base.SObjectField('day')
     start_time = base.SObjectField('start_time')
     end_time = base.SObjectField('end_time')
@@ -254,14 +252,15 @@ class LoginGroup(ProjectRelatedSObject):
                 self.search_key)
 
 
-class LoginInGroup(base.SObject):
+class LoginInGroup(UserRelatedSObject):
     __stype__ = 'sthpw/login_in_group'
 
-    login = base.ParentSObject('sthpw/login', 'login')
     login_group = base.ParentSObject('sthpw/login_group', 'login_group')
 
 
 class StatusLog(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
+    __stype__ = 'sthpw/status_log'
+
     search_type = base.SObjectField('search_type')
     search_id = base.SObjectField('search_id')
     status = base.SObjectField('status')
@@ -269,10 +268,11 @@ class StatusLog(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     from_status = base.SObjectField('from_status')
     project_code = base.SObjectField('project_code')
     search_code = base.SObjectField('search_code')
-    login = base.SObjectField('login')
 
 
 class Connection(ProjectRelatedSObject):
+    __stype__ = 'sthpw/connection'
+
     context = base.SObjectField('context')
     project_code = base.SObjectField('project_code')
     src_search_type = base.SObjectField('src_search_type')
@@ -298,11 +298,12 @@ class Connection(ProjectRelatedSObject):
         return self.conn.get_by_search_key(skey)
 
 
-class GlobalServerTrigger(base.SObject):
+class GlobalServerTrigger(ProjectRelatedSObject):
     __stype__ = 'sthpw/trigger'
 
 
-class Notification(base.SObject):
+class Notification(
+        ProjectRelatedSObject, UserRelatedSObject, NonProjectSObject):
     __stype__ = 'sthpw/notification'
 
 
@@ -322,12 +323,14 @@ class ExceptionLog(base.SObject):
     __stype__ = 'sthpw/exception_log'
 
 
-class GlobalTranslation(base.SObject):
+class GlobalTranslation(UserRelatedSObject):
     __stype__ = 'sthpw/translation'
 
 
-class Schema(base.SObject):
+class Schema(ProjectRelatedSObject):
     __stype__ = 'sthpw/schema'
+
+    schema = base.SObjectField('schema')
 
 
 class Pipeline(ProjectRelatedSObject):
