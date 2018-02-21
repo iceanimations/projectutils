@@ -136,16 +136,6 @@ class Task(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     milestone = base.ParentSObject('sthpw/milestone', 'milestone_code')
 
 
-class Pipeline(ProjectRelatedSObject):
-    pipeline = base.SObjectField('pipeline')
-    search_type = base.SObjectField('search_type')
-    project_code = base.SObjectField('project_code')
-    description = base.SObjectField('description')
-    color = base.SObjectField('color')
-    autocreate_tasks = base.SObjectField('autocreate_tasks')
-    parent_process = base.SObjectField('parent_process')
-
-
 class WorkHour(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     __stype__ = 'sthpw/work_hour'
 
@@ -308,5 +298,43 @@ class Connection(ProjectRelatedSObject):
         return self.conn.get_by_search_key(skey)
 
 
-class Naming(NonProjectSObject, ProjectRelatedSObject):
-    pass
+class GlobalServerTrigger(base.SObject):
+    __stype__ = 'sthpw/trigger'
+
+
+class Notification(base.SObject):
+    __stype__ = 'sthpw/notification'
+
+
+class DbResource(base.SObject):
+    __stype__ = 'sthpw/db_resource'
+
+
+class WidgetSetting(base.SObject):
+    __stype__ = 'sthpw/wdg_settings'
+
+
+class DebugLog(base.SObject):
+    __stype__ = 'sthpw/debug_log'
+
+
+class ExceptionLog(base.SObject):
+    __stype__ = 'sthpw/exception_log'
+
+
+class GlobalTranslation(base.SObject):
+    __stype__ = 'sthpw/translation'
+
+
+class Schema(base.SObject):
+    __stype__ = 'sthpw/schema'
+
+
+class Pipeline(ProjectRelatedSObject):
+    pipeline = base.SObjectField('pipeline')
+    search_type = base.SObjectField('search_type')
+    project_code = base.SObjectField('project_code')
+    description = base.SObjectField('description')
+    color = base.SObjectField('color')
+    autocreate_tasks = base.SObjectField('autocreate_tasks')
+    parent_process = base.SObjectField('parent_process')

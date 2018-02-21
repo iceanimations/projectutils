@@ -120,19 +120,11 @@ class Context(object):
         return context.split('/')[0]
 
     def get_process(self):
-        return Process(self._context, self.sobject)
+        return Context(self.process(), self.sobject)
 
     @property
     def snapshots(self):
-        self._sobject.get_snapshots(
-                context=self._context)
-
-
-class Process(Context):
-
-    def __init__(self, context, sobject=None):
-        self.sobject = sobject
-        self.context = self.process(context)
+        self._sobject.query_snapshots(context=self._context)
 
 
 class SObject(object):
@@ -279,3 +271,52 @@ class UnknownSObject(SObject):
         self = super(UnknownSObject, cls).__new__(cls, data, conn)
         self.__stype__ = cls.conn.get_stype(data)
         return self
+
+
+class Naming(SObject):
+    __stype__ = 'config/naming'
+
+    base_dir_alias = SObjectField('base_dir_alias')
+    context = SObjectField('context')
+    latest_versionless = SObjectField('latest_versionless')
+    class_name = SObjectField('class_name')
+    sandbox_dir_naming = SObjectField('sandbox_dir_naming')
+    current_versionless = SObjectField('current_versionless')
+    checkin_type = SObjectField('checkin_type')
+    dir_naming = SObjectField('dir_naming')
+    search_type = SObjectField('search_type')
+    manual_version = SObjectField('manual_version')
+    file_naming = SObjectField('file_naming')
+    snapshot_type = SObjectField('snapshot_type')
+    script_path = SObjectField('script_path')
+    ingest_rule_code = SObjectField('ingest_rule_code')
+    sandbox_dir_alias = SObjectField('sandbox_dir_alias')
+    condition = SObjectField('condition')
+
+
+class Process(SObject):
+    __stype__ = 'config/process'
+
+
+class Translation(SObject):
+    __stype__ = 'config/process'
+
+
+class WidgetConfig(SObject):
+    __stype__ = 'config/widget_config'
+
+
+class ClientTrigger(SObject):
+    __stype__ = 'config/client_trigger'
+
+
+class ServerTrigger(SObject):
+    __stype__ = 'config/trigger'
+
+
+class ProjectSetting(SObject):
+    __stype__ = 'config/prod_setting'
+
+
+class CustomURL(SObject):
+    __stype__ = 'config/url'
