@@ -1,5 +1,7 @@
 from abc import ABCMeta, abstractproperty
 from . import server as _server
+import functools
+import traceback
 
 
 class SObjectMeta(ABCMeta):
@@ -7,17 +9,26 @@ class SObjectMeta(ABCMeta):
     subclasses = dict()
 
     def __new__(mcls, name, bases, namespace):
-        for _name, _member in namespace.copy().items():
-            if isinstance(_member, FuncOverride):
-                def _wrapper(self, *args, **kwargs):
-                    return _member.func(
-                            self.conn, self.search_key, *args, **kwargs)
-                _wrapper.__name__ = _name
-                _wrapper.__doc__ = _member.func.__doc__
-                namespace[_name] = _wrapper
         cls = super(SObjectMeta, mcls).__new__(mcls, name, bases, namespace)
         _server.TacticObjectServer.register_sobject_class(cls)
         return cls
+
+
+class FuncOverride(object):
+    func = None
+
+    def __init__(self, func):
+        self.func = func
+        self.__doc__ = func.__doc__
+
+    def __get__(self, obj, cls):
+        if obj:
+            _func = functools.partial(self.func, obj.conn, obj.search_key)
+            _func.__doc__ = self.func.__doc__
+            _func.__name__ = self.func.__name__
+            return _func
+        else:
+            return self
 
 
 class RelatedSObject(object):
@@ -78,17 +89,57 @@ class SObjectField(object):
                 self.__key__, obj.__stype__))
 
 
-class FuncOverride(object):
-    func = None
+class Context(object):
+    _sobject = None
+    _context = ''
 
-    def __init__(self, func):
-        self.func = func
+    def __init__(self, context, sobject=None, conn=None):
+        self._sobject = sobject
+        self._context = context
+
+    def __repr__(self):
+        return "Context(%s, %r)" % (self._context, self._sobject)
+
+    def get_latest(self, versionless=False):
+        return self._sobject.get_snapshot(
+                context=self.context, version=-1, versionless=versionless,
+                include_paths=False, include_full_xml=False,
+                include_paths_dict=False, include_web_paths_dict=False)
+
+    def get_current(self, versionless=False):
+        return self._sobject.get_snapshot(
+                context=self.context, version=0, versionless=versionless,
+                include_paths=False, include_full_xml=False,
+                include_paths_dict=False, include_web_paths_dict=False)
+
+    def has_versionless(self):
+        pass
+
+    def process(self, context):
+        context = context or self._context
+        return context.split('/')[0]
+
+    def get_process(self):
+        return Process(self._context, self.sobject)
+
+    @property
+    def snapshots(self):
+        self._sobject.get_snapshots(
+                context=self._context)
+
+
+class Process(Context):
+
+    def __init__(self, context, sobject=None):
+        self.sobject = sobject
+        self.context = self.process(context)
 
 
 class SObject(object):
     __metaclass__ = SObjectMeta
-    conn = _server.Connection()
     __data__ = None
+
+    conn = _server.Connection()
 
     search_key = SObjectField('__search_key__')
     code = SObjectField('code', True)
@@ -137,16 +188,10 @@ class SObject(object):
     @classmethod
     def query(cls, filters=[], columns=[], order_bys=[], show_retired=False,
               limit=None, offset=None, single=False):
-        result = cls.conn.query(
+        return cls.conn.query(
                 cls.__stype__, filters=filters, columns=columns,
                 order_bys=order_bys, show_retired=show_retired, limit=limit,
                 offset=offset, single=single)
-        if single:
-            if not result:
-                return None
-            else:
-                return cls(result.__data__, conn=cls.conn)
-        return [cls(res.__data__, conn=cls.conn) for res in result]
 
     @classmethod
     def fast_query(cls, filters=[], limit=None):
@@ -157,22 +202,25 @@ class SObject(object):
         return cls.conn.get_by_code(cls.__stype__, code)
 
     @classmethod
-    def get_by_search_key(cls, search_key):
-        data = cls.conn.get_by_search_key(search_key)
-        _server.TacticObjectServer.wrap_sobject_class(data, cls.conn)
-
-    @classmethod
     def get_unique_sobject(cls):
-        return cls(cls.conn.get_unique_sobject(cls.__stype__))
+        return cls.conn.get_unique_sobject(cls.__stype__)
 
     @classmethod
     def get_column_names(cls):
         return cls.conn.get_column_names(cls.__stype__)
 
+    def get_by_search_key(self):
+        obj = self.conn.get_by_search_key(self.search_key)
+        self.__data__.update(obj.__data__)
+        return obj
+    get_by_search_key.__doc__ = \
+        _server.TacticObjectServer.get_by_search_key.__doc__
+
     def connect_sobject(self, dest, context='default'):
         return self.conn.connect_sobjects(
                 self.search_key, dest.search_key, context)
-    connect_sobject.__doc__ = _server.TacticObjectServer.__doc__
+    connect_sobject.__doc__ = \
+        _server.TacticObjectServer.connect_sobjects.__doc__
 
     def insert_update(self, metadata={}, parent_key=None, info={},
                       use_id=False, triggers=False):
@@ -192,6 +240,9 @@ class SObject(object):
         return self.conn.update(
                 self.search_key, self.__data__, *args, **kwargs)
     update.__doc__ = _server.TacticObjectServer.update.__doc__
+
+    def get_context(self, context):
+        return Context(context, self)
 
     reactivate = FuncOverride(
             _server.TacticObjectServer.reactivate_sobject)

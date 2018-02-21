@@ -28,15 +28,17 @@ class TacticObjectServerMeta(USER.TacticServerMeta):
             real_func = getattr(self.real_server, func_name)
 
             result = real_func(*args, **kwargs)
-            if TacticObjectServer.is_sobj_dict(result):
-                result = TacticObjectServer.wrap_sobject_class(
+            if self.is_sobj_dict(result):
+                result = self.wrap_sobject_class(
                         result, self)
             elif isinstance(result, list) and all(
-                    (True if TacticObjectServer.is_sobj_dict(member)
+                    (True if self.is_sobj_dict(member)
                         else False for member in result)):
-                result = [TacticObjectServer.wrap_sobject_class(mem, self)
+                result = [self.wrap_sobject_class(mem, self)
                           for mem in result]
             return result
+
+        _object_wrapper.__orig_func__ = func
         _object_wrapper.__name__ = func_name
         _object_wrapper.__doc__ = func.__doc__
 

@@ -1,10 +1,6 @@
 from .. import base
 
 
-__all__ = ['Snapshot', 'File', 'Task', 'Project', 'Login', 'LoginGroup',
-           'LoginInGroup']
-
-
 class ProjectRelatedSObject(base.SObject):
     project = base.ParentSObject('sthpw/project', 'project_code')
 
@@ -310,3 +306,7 @@ class Connection(ProjectRelatedSObject):
                 project_code=self.project_code if self.project_code else None,
                 column='id')
         return self.conn.get_by_search_key(skey)
+
+
+class Naming(NonProjectSObject, ProjectRelatedSObject):
+    pass
