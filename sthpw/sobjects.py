@@ -302,8 +302,8 @@ class GlobalServerTrigger(ProjectRelatedSObject):
     __stype__ = 'sthpw/trigger'
 
 
-class Notification(
-        ProjectRelatedSObject, UserRelatedSObject, NonProjectSObject):
+class Notification(ProjectRelatedSObject, UserRelatedSObject,
+                   NonProjectSObject):
     __stype__ = 'sthpw/notification'
 
 
