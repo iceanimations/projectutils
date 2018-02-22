@@ -69,6 +69,37 @@ class ChildSObject(RelatedSObject):
         return obj.conn.eval('@SOBJECT(%s)' % self.__stype__, obj.search_key)
 
 
+class ChildSnapshot(ChildSObject):
+
+    def __init__(self, show_retired=False):
+        super(ChildSnapshot, self).__init__(
+                'sthpw/snapshot', show_retired=show_retired)
+
+    def __get__(self, obj, cls):
+        search_key = obj.search_key
+        stype, params = search_key.split('?')
+        params = dict([tuple(x.split('=')) for x in params.split('&')])
+
+        if stype == 'sthpw/project':
+            filters = [('project_code', params.get('code'))]
+        else:
+            if 'project' in params:
+                project = params.get('project')
+                filters = [('search_type', '%s?project=%s' % (stype, project))]
+                filters.append(('project_code', params.get('project')))
+            else:
+                filters = [('search_type', obj.__stype__)]
+            if 'code' in params:
+                filters.append(('search_code', params.get('code')))
+            if 'id' in params:
+                filters.append(('search_id', 'id'))
+        if not filters:
+            return []
+        return obj.conn.query_snapshots(
+                filters=filters, include_paths=True, include_paths_dict=True,
+                include_parent=True, include_files=True)
+
+
 class SObjectField(object):
     __key__ = None
     __force__ = False
@@ -84,9 +115,39 @@ class SObjectField(object):
         elif self.__force__ and self.__key__ in obj.conn.get_column_names(
                 cls.__stype__):
             self.__data__ = obj.conn.get_by_search_key(obj.search_key).__data__
+            return obj.__data__[self.__key__]
         else:
             raise AttributeError('%s is not a valid key for %s object' % (
                 self.__key__, obj.__stype__))
+
+    def __set__(self, obj, value):
+        if self.__key__ in obj.__data__:
+            obj.__data__[self.__key__] = value
+        elif self.__force__ and self.__key__ in obj.conn.get_column_names(
+                obj.__stype__):
+            self.__data__[self.__key__] = value
+        else:
+            raise AttributeError('%s is not a valid key for %s object' % (
+                self.__key__, obj.__stype__))
+
+
+class SObjectObjectField(object):
+    __key__ = None
+
+    def __init__(self, key):
+        self.__key__ = key
+
+    def __get__(self, obj, cls):
+        value = obj.data[self.__key__]
+        if _server.TacticObjectServer.is_sobj_dict(value):
+            return _server.TacticObjectServer.wrap_sobject_class(
+                    value, obj.conn)
+        elif isinstance(value, list) and all(
+                (True if self.is_sobj_dict(member)
+                    else False for member in value)):
+            result = [self.wrap_sobject_class(member, obj.conn)
+                      for member in value]
+        return result
 
 
 class Context(object):
@@ -134,7 +195,7 @@ class SObject(object):
     conn = _server.Connection()
 
     search_key = SObjectField('__search_key__')
-    code = SObjectField('code', True)
+    code = SObjectField('code', False)
     description = SObjectField('description', True)
     id = SObjectField('id', True)
     name = SObjectField('name', True)
@@ -142,7 +203,8 @@ class SObject(object):
     status = SObjectField('status', True)
     timestamp = SObjectField('timestamp', True)
 
-    snapshots = ChildSObject('sthpw/snapshot')
+    snapshots = ChildSnapshot()
+
     tasks = ChildSObject('sthpw/task')
 
     def __init__(self, data, conn=None):

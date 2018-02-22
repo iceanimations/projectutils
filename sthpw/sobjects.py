@@ -52,6 +52,12 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     context = base.SObjectField('context', True)
     column_name = base.SObjectField('column_name', True)
 
+    paths = base.SObjectField('__paths__')
+    paths_dict = base.SObjectField('__paths_dict__')
+
+    parent_cached = base.SObjectField('__parent__')
+    files_cached = base.SObjectField('__files__')
+
     lock_user = base.ParentSObject('sthpw/login', 'lock_login')
     files = base.ChildSObject('sthpw/file')
 

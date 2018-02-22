@@ -1,3 +1,8 @@
+import sys
+
+sys.path.append('d:/workspace/pyenv_maya/tactic')
+
+
 from auth import user as USER
 
 
@@ -124,5 +129,6 @@ class Connection(object):
             self._conn = value
         else:
             obj._conn = value
+
 
 set_server(TacticObjectServer(USER.get_server()))
