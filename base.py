@@ -1,7 +1,6 @@
 from abc import ABCMeta, abstractproperty
 from . import server as _server
 import functools
-import traceback
 
 
 class SObjectMeta(ABCMeta):
@@ -93,8 +92,10 @@ class ChildSnapshot(ChildSObject):
                 filters.append(('search_code', params.get('code')))
             if 'id' in params:
                 filters.append(('search_id', 'id'))
+
         if not filters:
             return []
+
         return obj.conn.query_snapshots(
                 filters=filters, include_paths=True, include_paths_dict=True,
                 include_parent=True, include_files=True)
@@ -131,23 +132,25 @@ class SObjectField(object):
                 self.__key__, obj.__stype__))
 
 
-class SObjectObjectField(object):
+class CachedObjectField(object):
+    __stype__ = ''
     __key__ = None
 
-    def __init__(self, key):
+    def __init__(self, key, stype=''):
         self.__key__ = key
+        self.__type__ = stype
 
     def __get__(self, obj, cls):
         value = obj.data[self.__key__]
-        if _server.TacticObjectServer.is_sobj_dict(value):
-            return _server.TacticObjectServer.wrap_sobject_class(
+        if obj.conn.is_sobj_dict(value):
+            value = obj.conn.wrap_sobject_class(
                     value, obj.conn)
         elif isinstance(value, list) and all(
-                (True if self.is_sobj_dict(member)
+                (True if obj.conn.is_sobj_dict(member)
                     else False for member in value)):
-            result = [self.wrap_sobject_class(member, obj.conn)
-                      for member in value]
-        return result
+            value = [obj.conn.wrap_sobject_class(member, obj.conn)
+                     for member in value]
+        return value
 
 
 class Context(object):
@@ -204,7 +207,6 @@ class SObject(object):
     timestamp = SObjectField('timestamp', True)
 
     snapshots = ChildSnapshot()
-
     tasks = ChildSObject('sthpw/task')
 
     def __init__(self, data, conn=None):

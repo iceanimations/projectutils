@@ -1,4 +1,5 @@
 from .. import base
+from .. import server as _server
 
 
 class ProjectRelatedSObject(base.SObject):
@@ -20,7 +21,7 @@ class NonProjectSObject(base.SObject):
 
     @property
     def parent_sobject(self):
-        self.conn.get_by_search_key(self.parent_search_key)
+        return self.conn.get_by_search_key(self.parent_search_key)
 
 
 class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
@@ -55,11 +56,16 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     paths = base.SObjectField('__paths__')
     paths_dict = base.SObjectField('__paths_dict__')
 
-    parent_cached = base.SObjectField('__parent__')
-    files_cached = base.SObjectField('__files__')
+    parent_cached = base.CachedObjectField('__parent__')
+    files_cached = base.CachedObjectField('__files__')
 
     lock_user = base.ParentSObject('sthpw/login', 'lock_login')
     files = base.ChildSObject('sthpw/file')
+
+    def get_all_paths(self, *args, **kwargs):
+        self.conn.get_all_paths_from_snapshot(*args, **kwargs)
+    get_all_paths.__doc__ = \
+        _server.TacticObjectServer.get_all_paths_from_snapshot.__doc__
 
 
 class File(NonProjectSObject, ProjectRelatedSObject):

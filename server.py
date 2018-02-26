@@ -1,12 +1,15 @@
-import sys
-
-sys.path.append('d:/workspace/pyenv_maya/tactic')
-
-
 from auth import user as USER
 
 
 _server = None
+
+
+def logout():
+    return USER.logout()
+
+
+def login(login, password, project=None):
+    return USER.login(login, password, project=project)
 
 
 def set_server(server):

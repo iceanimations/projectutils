@@ -1,1 +1,1 @@
-from .sobject import *
+from .sobjects import *
