@@ -212,7 +212,7 @@ class Project(base.SObject):
 
     @property
     def checkins(self):
-        self.conn.Snapshot.query(filters=[('project_code', self.code)])
+        return self.conn.Snapshot.query(filters=[('project_code', self.code)])
 
     def set(self):
         return self.conn.set_project(self.code)
@@ -337,30 +337,77 @@ class Connection(ProjectRelatedSObject):
 class GlobalServerTrigger(ProjectRelatedSObject):
     __stype__ = 'sthpw/trigger'
 
+    class_name = base.SObjectField('class_name')
+    script_path = base.SObjectField('script_path')
+    description = base.SObjectField('description')
+    event = base.SObjectField('event')
+    mode = base.SObjectField('mode')
+    project_code = base.SObjectField('project_code')
+    s_status = base.SObjectField('s_status')
+    process = base.SObjectField('process')
+
 
 class Notification(ProjectRelatedSObject, UserRelatedSObject,
                    NonProjectSObject):
     __stype__ = 'sthpw/notification'
 
+    event = base.SObjectField('event')
+    description = base.SObjectField('description')
+    search_type = base.SObjectField('search_type')
+    project_code = base.SObjectField('project_code')
+    rules = base.SObjectField('rules')
+    subject = base.SObjectField('subject')
+    message = base.SObjectField('message')
+    email_handler_cls = base.SObjectField('email_handler_cls')
+    mail_to = base.SObjectField('mail_to')
+    mail_cc = base.SObjectField('mail_cc')
+    mail_bcc = base.SObjectField('mail_bcc')
+    title = base.SObjectField('title')
+    process = base.SObjectField('process')
+    listen_event = base.SObjectField('listen_event')
+    data = base.SObjectField('data')
+
 
 class DbResource(base.SObject):
     __stype__ = 'sthpw/db_resource'
 
+    host = base.SObjectField('host')
+    port = base.SObjectField('port')
+    vendor = base.SObjectField('vendor')
+    login = base.SObjectField('login')
+    password = base.SObjectField('password')
 
-class WidgetSetting(base.SObject):
+
+class WidgetSetting(ProjectRelatedSObject, UserRelatedSObject):
     __stype__ = 'sthpw/wdg_settings'
 
+    key = base.SObjectField('key')
+    data = base.SObjectField('data')
 
-class DebugLog(base.SObject):
+
+class DebugLog(UserRelatedSObject):
     __stype__ = 'sthpw/debug_log'
 
+    category = base.SObjectField('category')
+    level = base.SObjectField('level')
+    message = base.SObjectField('message')
 
-class ExceptionLog(base.SObject):
+
+class ExceptionLog(UserRelatedSObject):
     __stype__ = 'sthpw/exception_log'
+
+    class_ = base.SObjectField('class')
+    message = base.SObjectField('message')
+    stack_trace = base.SObjectField('stack_trace')
 
 
 class GlobalTranslation(UserRelatedSObject):
     __stype__ = 'sthpw/translation'
+
+    en = base.SObjectField('en')
+    fr = base.SObjectField('fr')
+    ja = base.SObjectField('ja')
+    es = base.SObjectField('es')
 
 
 class Schema(ProjectRelatedSObject):

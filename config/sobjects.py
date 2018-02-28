@@ -59,13 +59,12 @@ class Translation(sthpw.UserRelatedSObject):
     es = base.SObjectField('es')
 
 
-class WidgetConfig(base.SObject):
+class WidgetConfig(sthpw.UserRelatedSObject):
     __stype__ = 'config/widget_config'
 
     view = base.SObjectField('view')
     category = base.SObjectField('category')
     search_type = base.SObjectField('search_type')
-    login = base.SObjectField('login')
     config = base.SObjectField('config')
     widget_type = base.SObjectField('widget_type')
     title = base.SObjectField('title')
