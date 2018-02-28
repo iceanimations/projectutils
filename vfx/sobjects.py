@@ -1,17 +1,33 @@
+import re
+
 from .. import base
 from .. import sthpw
 from .. import config
 
 
-class AssetCategory(sthpw.UserRelatedSObject):
+class ProjectSObject(base.SObject):
+
+    def get_project(self):
+        return re.search(r'(?<=\?project=)[^&]*(?=&)', self.search_key).group()
+
+
+class ProjectUserSObject(ProjectSObject, sthpw.UserRelatedSObject):
+    pass
+
+
+class AssetCategory(ProjectUserSObject):
     __stype__ = 'vfx/asset_category'
 
+    assets = base.ChildSObject('vfx/asset')
 
-class AssetType(base.SObject):
+
+class AssetType(ProjectSObject):
     __stype__ = 'vfx/asset_type'
 
+    assets = base.ChildSObject('vfx/asset')
 
-class Asset(base.SObject):
+
+class Asset(ProjectSObject):
     __stype__ = 'vfx/asset'
 
     short_code = base.SObjectField('short_code')
@@ -26,7 +42,7 @@ class Asset(base.SObject):
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
 
-class Texture(base.SObject):
+class Texture(ProjectSObject):
     __stype__ = 'vfx/texture'
 
     category = base.SObjectField('category')
@@ -39,7 +55,7 @@ class Texture(base.SObject):
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
 
-class ProductionElement(base.SObject):
+class ProductionElement(ProjectSObject):
     '''Production Element Class'''
     sort_order = base.SObjectField('sort_order')
 
@@ -79,11 +95,11 @@ class Shot(ProductionElement):
     sequence = base.ParentSObject('sthpw/sequence', 'sequence_code')
 
 
-class ProductionAsset(base.SObject):
+class ProductionAsset(ProjectSObject):
     __asset_type__ = 'vfx/asset'
     __prod_type__ = None
 
-    asset = base.ParentSObject('vfx/asset', 'asset_code')
+    asset = base.ParentSObject(__asset_type__, 'asset_code')
     asset_code = base.SObjectField('asset_code')
 
     @base.abstractproperty
@@ -107,7 +123,7 @@ class AssetInSequence(ProductionAsset):
     prod_elem = sequence = base.ParentSObject(__prod_type__, 'sequence_code')
 
 
-class AssetInShot(ProductionAsset, sthpw.UserRelatedSObject):
+class AssetInShot(ProductionAsset, ProjectUserSObject):
     __stype__ = 'vfx/asset_in_shot'
     __prod_type__ = 'vfx/shot'
 
@@ -119,7 +135,7 @@ class AssetInShot(ProductionAsset, sthpw.UserRelatedSObject):
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
 
-class Layer(base.SObject):
+class Layer(ProjectSObject):
     __stype__ = 'vfx/layer'
 
     sort_order = base.SObjectField('sort_order')
@@ -128,36 +144,36 @@ class Layer(base.SObject):
     snapshot = base.SObjectField('snapshot')
 
 
-class Release(base.SObject):
+class Release(ProjectSObject):
     __stype__ = 'vfx/release'
 
 
-class ArtReference(base.SObject):
+class ArtReference(ProjectSObject):
     __stype__ = 'vfx/art_reference'
 
     snapshot = base.SObjectField('snapshot')
     keywords = base.SObjectField('keywords')
 
 
-class Camera(base.SObject):
+class Camera(ProjectSObject):
     __stype__ = 'vfx/camera'
 
     shot_code = base.SObjectField('shot_code')
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class Leica(sthpw.UserRelatedSObject):
+class Leica(ProjectUserSObject):
     __stype__ = 'vfx/leica'
 
     shot_code = base.SObjectField('shot_code')
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class NodeData(base.SObject):
+class NodeData(ProjectSObject):
     __stype__ = 'vfx/node_data'
 
 
-class Plate(base.SObject):
+class Plate(ProjectSObject):
     __stype__ = 'vfx/plate'
 
     episode_code = base.SObjectField('episode_code')
@@ -168,7 +184,7 @@ class Plate(base.SObject):
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class Render(sthpw.UserRelatedSObject):
+class Render(ProjectUserSObject):
     __stype__ = 'vfx/render'
 
     _file_range = base.SObjectField('_file_range')
@@ -192,14 +208,14 @@ class Render(sthpw.UserRelatedSObject):
         return self.conn.get_by_search_key(self.parent_search_key)
 
 
-class Review(sthpw.UserRelatedSObject):
+class Review(ProjectUserSObject):
     __stype__ = 'vfx/review'
 
     type = base.SObjectField('type')
     date = base.SObjectField('date')
 
 
-class Schedule(sthpw.UserRelatedSObject):
+class Schedule(ProjectUserSObject):
     __stype__ = 'vfx/schedule'
 
     shot_code = base.SObjectField('shot_code')
@@ -208,7 +224,7 @@ class Schedule(sthpw.UserRelatedSObject):
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
 
-class Script(base.SObject):
+class Script(ProjectSObject):
     __stype__ = 'vfx/script'
 
     title = base.SObjectField('title')
@@ -219,7 +235,7 @@ class Script(base.SObject):
     sequence = base.ParentSObject('vfx/sequence', sequence_code)
 
 
-class ShotTexture(sthpw.UserRelatedSObject):
+class ShotTexture(ProjectUserSObject):
     __stype__ = 'vfx/shot_texture'
 
     snapshot = base.SObjectField('snapshot')
@@ -238,14 +254,14 @@ class ShotTexture(sthpw.UserRelatedSObject):
         return self.conn.get_by_search_key(self.parent_search_key)
 
 
-class Storyboard(base.SObject):
+class Storyboard(ProjectSObject):
     __stype__ = 'vfx/storyboard'
 
     shot_code = base.SObjectField('shot_code')
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class Submission(sthpw.UserRelatedSObject):
+class Submission(ProjectUserSObject):
     __stype__ = 'vfx/submission'
 
     review_code = base.SObjectField('review_code')
