@@ -4,6 +4,7 @@ from .. import server as _server
 
 class ProjectRelatedSObject(base.SObject):
     project = base.ParentSObject('sthpw/project', 'project_code')
+    project_code = base.SObjectField('project_code')
 
 
 class UserRelatedSObject(base.SObject):
@@ -31,7 +32,6 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     snapshot_type = base.SObjectField('snapshot_type', True)
     is_synced = base.SObjectField('is_synced', True)
     process = base.SObjectField('process', True)
-    project_code = base.SObjectField('project_code', True)
     lock_date = base.SObjectField('lock_data', True)
     is_latest = base.SObjectField('is_latest', True)
     revision = base.SObjectField('revision', True)
@@ -63,9 +63,20 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     files = base.ChildSObject('sthpw/file')
 
     def get_all_paths(self, *args, **kwargs):
-        self.conn.get_all_paths_from_snapshot(*args, **kwargs)
+        return self.conn.get_all_paths_from_snapshot(
+                self.code, *args, **kwargs)
     get_all_paths.__doc__ = \
         _server.TacticObjectServer.get_all_paths_from_snapshot.__doc__
+
+    def query(self, *args, **kwargs):
+        return self.conn.query_snapshots(
+                *args, include_paths=True, include_paths_dict=True,
+                include_parent=True, include_files=True, **kwargs)
+    query.__doc__ = _server.TacticObjectServer.query_snapshots
+
+    def get_preallocated_path(self, *args, **kwargs):
+        return self.conn.get_preallocated_path(self.code, *args, **kwargs)
+    get_preallocated_path.__doc__ = _server.TacticObjectServer.__doc__
 
 
 class File(NonProjectSObject, ProjectRelatedSObject):
@@ -76,7 +87,6 @@ class File(NonProjectSObject, ProjectRelatedSObject):
     repo_type = base.SObjectField('repo_type')
     file_name = base.SObjectField('file_name')
     snapshot_code = base.SObjectField('snapshot_code')
-    project_code = base.SObjectField('project_code')
     base_type = base.SObjectField('base_type')
     st_size = base.SObjectField('st_size')
     type = base.SObjectField('type')
@@ -94,14 +104,14 @@ class File(NonProjectSObject, ProjectRelatedSObject):
     metadata_search = base.SObjectField('metadata_search')
 
     @property
-    def snapshot(self):
-        return self.conn.get_parent(self.search_key)
+    def parent_snapshot(self):
+        return self.conn.Snapshot.query(
+                filters=[('code', self.snapshot_code)], single=True)
 
 
 class Milestone(ProjectRelatedSObject):
     __stype__ = 'sthpw/milestone'
 
-    project_code = base.SObjectField('project_code', True)
     due_date = base.SObjectField('due_date', True)
 
 
@@ -112,7 +122,6 @@ class Task(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     process = base.SObjectField('process')
     bid_end_date = base.SObjectField('bid_end_date')
     client_version = base.SObjectField('client_version')
-    project_code = base.SObjectField('project_code')
     completion = base.SObjectField('completion')
     search_type = base.SObjectField('search_type')
     actual_start_date = base.SObjectField('actual_start_date')
@@ -150,7 +159,6 @@ class Task(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
 class WorkHour(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     __stype__ = 'sthpw/work_hour'
 
-    project_code = base.SObjectField('project_code')
     description = base.SObjectField('description')
     category = base.SObjectField('category')
     day = base.SObjectField('day')
@@ -189,11 +197,25 @@ class Project(base.SObject):
     node_naming_cls = base.SObjectField('node_naming_cls')
     initials = base.SObjectField('initials')
 
-    def set(self):
-        self.conn.set_project(self.code)
+    files = base.ChildSObject('sthpw/file')
+    groups = base.ChildSObject('sthpw/login_group')
+    milestones = base.ChildSObject('sthpw/milestone')
+    tasks = base.ChildSObject('sthpw/task')
+    work_hours = base.ChildSObject('sthpw/work_hour')
+    status_logs = base.ChildSObject('sthpw/status_log')
+    connection = base.ChildSObject('sthpw/connection')
+    triggers = base.ChildSObject('sthpw/trigger')
+    notifications = base.ChildSObject('sthpw/notification')
+    translations = base.ChildSObject('sthpw/translation')
+    schemas = base.ChildSObject('sthpw/schema')
+    pipelines = base.ChildSObject('sthpw/pipeline')
 
-    def get_groups(self):
-        pass
+    @property
+    def checkins(self):
+        self.conn.Snapshot.query(filters=[('project_code', self.code)])
+
+    def set(self):
+        return self.conn.set_project(self.code)
 
     @classmethod
     def get_current(cls):
@@ -220,12 +242,17 @@ class Login(base.SObject):
     login = base.SObjectField('login')
     password = base.SObjectField('password')
     login_attempt = base.SObjectField('login_attempt')
-    project_code = base.SObjectField('project_code')
     location = base.SObjectField('location')
+
+    snapshots = base.ChildSObject('sthpw/snapshot')
 
     @classmethod
     def get_me(cls):
         return cls.get_by_code(cls.conn.login)
+
+    @property
+    def checkins(self):
+        return self.conn.Snapshot.query(filters=[('login', self.code)])
 
     @property
     def groups(self):
@@ -251,7 +278,6 @@ class LoginGroup(ProjectRelatedSObject):
     access_rules = base.SObjectField('access_rules')
     is_default = base.SObjectField('is_default')
     redirect_url = base.SObjectField('redirect_url')
-    project_code = base.SObjectField('project_code')
     sub_groups = base.SObjectField('sub_groups')
     namespace = base.SObjectField('namespace')
     start_link = base.SObjectField('start_link')
@@ -278,7 +304,6 @@ class StatusLog(NonProjectSObject, ProjectRelatedSObject, UserRelatedSObject):
     status = base.SObjectField('status')
     to_status = base.SObjectField('to_status')
     from_status = base.SObjectField('from_status')
-    project_code = base.SObjectField('project_code')
     search_code = base.SObjectField('search_code')
 
 
@@ -286,7 +311,6 @@ class Connection(ProjectRelatedSObject):
     __stype__ = 'sthpw/connection'
 
     context = base.SObjectField('context')
-    project_code = base.SObjectField('project_code')
     src_search_type = base.SObjectField('src_search_type')
     src_search_id = base.SObjectField('src_search_id')
     dst_search_type = base.SObjectField('dst_search_type')
@@ -348,7 +372,6 @@ class Schema(ProjectRelatedSObject):
 class Pipeline(ProjectRelatedSObject):
     pipeline = base.SObjectField('pipeline')
     search_type = base.SObjectField('search_type')
-    project_code = base.SObjectField('project_code')
     description = base.SObjectField('description')
     color = base.SObjectField('color')
     autocreate_tasks = base.SObjectField('autocreate_tasks')

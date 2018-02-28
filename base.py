@@ -235,6 +235,10 @@ class SObject(object):
     def data(self):
         return self.__data__
 
+    @property
+    def fields(self):
+        return self.__data__.keys()
+
     def get_field(self, key):
         return self.__data__[key]
 
@@ -326,6 +330,8 @@ class SObject(object):
             _server.TacticObjectServer.get_connected_sobject)
     get_connected_sobjects = FuncOverride(
             _server.TacticObjectServer.get_connected_sobjects)
+    get_virtual_snapshot_path = FuncOverride(
+            _server.TacticObjectServer.get_virtual_snapshot_path)
 
 
 class UnknownSObject(SObject):

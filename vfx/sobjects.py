@@ -51,7 +51,7 @@ class Episode(ProductionElement):
 class Sequence(ProductionElement):
     __stype__ = 'vfx/sequence'
 
-    episode_code = base.SObject('episode')
+    episode_code = base.SObjectField('episode')
     episode = base.ParentSObject('vfx/episode', 'episode_code')
 
 
@@ -168,7 +168,7 @@ class Plate(base.SObject):
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class Render(base.UserRelatedSObject):
+class Render(sthpw.UserRelatedSObject):
     __stype__ = 'vfx/render'
 
     _file_range = base.SObjectField('_file_range')
@@ -192,14 +192,14 @@ class Render(base.UserRelatedSObject):
         return self.conn.get_by_search_key(self.parent_search_key)
 
 
-class Review(base.UserRelatedSObject):
+class Review(sthpw.UserRelatedSObject):
     __stype__ = 'vfx/review'
 
     type = base.SObjectField('type')
     date = base.SObjectField('date')
 
 
-class Schedule(base.UserRelatedSObject):
+class Schedule(sthpw.UserRelatedSObject):
     __stype__ = 'vfx/schedule'
 
     shot_code = base.SObjectField('shot_code')
@@ -219,7 +219,7 @@ class Script(base.SObject):
     sequence = base.ParentSObject('vfx/sequence', sequence_code)
 
 
-class ShotTexture(base.UserRelatedSObject):
+class ShotTexture(sthpw.UserRelatedSObject):
     __stype__ = 'vfx/shot_texture'
 
     snapshot = base.SObjectField('snapshot')
@@ -245,7 +245,7 @@ class Storyboard(base.SObject):
     shot = base.ParentSObject('vfx/shot', 'shot_code')
 
 
-class Submission(base.UserRelatedSObject):
+class Submission(sthpw.UserRelatedSObject):
     __stype__ = 'vfx/submission'
 
     review_code = base.SObjectField('review_code')

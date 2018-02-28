@@ -21,11 +21,5 @@ def delete_sub_packages():
 
 
 def delete_package():
-    for name in sys.modules.copy():
-        if name.startswith(__name__):
-            del sys.modules[name]
-
-
-def reload_package():
     delete_sub_packages()
-    reload(sys.modules[__name__])
+    del sys.modules[__name__]
