@@ -1,6 +1,11 @@
 from abc import ABCMeta, abstractproperty
-from . import server as _server
 import functools
+import shutil
+import os
+import iutil
+import re
+
+from . import server as _server
 
 
 class SObjectMeta(ABCMeta):
@@ -30,24 +35,46 @@ class FuncOverride(object):
             return self
 
 
+class ContextMeta(type):
+    contexts = dict()
+
+    def __new__(mcls, name, bases, namespace):
+        cls = super(ContextMeta, mcls).__new__(mcls, name, bases, namespace)
+        cls.contexts[cls._context] = cls
+        return cls
+
+    def __call__(cls, context, sobject):
+        if context in cls.contexts:
+            ccls = cls.contexts[context]
+            return type.__call__(ccls, sobject)
+        else:
+            return type.__call__(cls, context, sobject)
+
+
 class RelatedSObject(object):
     __stype__ = ''
     __show_retired__ = False
+    __key__ = None
+    __related_key__ = None
 
-    def __init__(self, stype, show_retired=False):
+    def __init__(self, stype, key='code', related_key='code',
+                 show_retired=False):
         self.__stype__ = stype
         self.__show_retired__ = show_retired
+        self.__key__ = key
+        self.__related_key__ = related_key
 
     def __get__(self, obj, cls):
-        return obj.conn.eval('@SOBJECT(%s[id, %s].%s)' % (
-            obj.__stype__, obj.id, self.__stype__))
+        return obj.conn.eval('@SOBJECT(%s[%s, %s])' % (
+            self.__stype__, self.__related_key__, obj.get_field(self.__key__)))
 
 
 class ParentSObject(RelatedSObject):
     __key__ = None
 
     def __init__(self, stype, key, show_retired=False):
-        super(ParentSObject, self).__init__(stype, show_retired=show_retired)
+        super(ParentSObject, self).__init__(stype, key=key,
+                                            show_retired=show_retired)
         self.__key__ = key
 
     def __get__(self, obj, cls):
@@ -75,23 +102,9 @@ class ChildSnapshot(ChildSObject):
                 'sthpw/snapshot', show_retired=show_retired)
 
     def __get__(self, obj, cls):
-        search_key = obj.search_key
-        stype, params = search_key.split('?')
-        params = dict([tuple(x.split('=')) for x in params.split('&')])
+        ''':type obj: SObject'''
 
-        if stype == 'sthpw/project':
-            filters = [('project_code', params.get('code'))]
-        else:
-            if 'project' in params:
-                project = params.get('project')
-                filters = [('search_type', '%s?project=%s' % (stype, project))]
-                filters.append(('project_code', params.get('project')))
-            else:
-                filters = [('search_type', obj.__stype__)]
-            if 'code' in params:
-                filters.append(('search_code', params.get('code')))
-            if 'id' in params:
-                filters.append(('search_id', 'id'))
+        filters = obj.get_snapshot_filters()
 
         if not filters:
             return []
@@ -154,41 +167,86 @@ class CachedObjectField(object):
 
 
 class Context(object):
-    _sobject = None
-    _context = ''
+    __metaclass__ = ContextMeta
+    _context = '*'
 
-    def __init__(self, context, sobject=None, conn=None):
-        self._sobject = sobject
+    def __new__(cls, context, sobject):
+        return super(Context, cls).__new__(cls, context, sobject)
+
+    def __init__(self, context, sobject):
         self._context = context
+        self._sobject = sobject
 
     def __repr__(self):
         return "Context(%s, %r)" % (self._context, self._sobject)
 
     def get_latest(self, versionless=False):
         return self._sobject.get_snapshot(
-                context=self.context, version=-1, versionless=versionless,
+                context=self._context, version=-1, versionless=versionless,
                 include_paths=False, include_full_xml=False,
                 include_paths_dict=False, include_web_paths_dict=False)
 
     def get_current(self, versionless=False):
         return self._sobject.get_snapshot(
-                context=self.context, version=0, versionless=versionless,
+                context=self._context, version=0, versionless=versionless,
                 include_paths=False, include_full_xml=False,
                 include_paths_dict=False, include_web_paths_dict=False)
 
     def has_versionless(self):
         pass
 
-    def process(self, context):
-        context = context or self._context
-        return context.split('/')[0]
+    def process(self):
+        return self._context.split('/')[0]
 
     def get_process(self):
         return Context(self.process(), self.sobject)
 
     @property
     def snapshots(self):
-        self._sobject.query_snapshots(context=self._context)
+        filters = self._sobject.get_snapshot_filters()
+        filters.append(('context', self._context))
+        return self._sobject.conn.query_snapshots(
+                filters=filters, include_files=True, include_paths=True,
+                include_paths_dict=True, include_parent=True)
+
+    def checkout(self, **kwargs):
+        versionless = kwargs.pop('versionless', False)
+        if not versionless:
+            return self._sobject.checkout(**kwargs)
+
+        version = kwargs.get('version', -1)
+        file_types = kwargs.get('file_type', [])
+        to_dir = kwargs.get('to_dir', '.')
+        to_sandbox_dir = kwargs.get('to_sandbox_dir', False)
+
+        assert version in (0, -1)
+        snapshot = self._sobject.get_snapshot(
+                context=self._context, version=version, versionless=True)
+        sources = snapshot.get_all_paths(
+                file_types=file_types, mode='client_repo')
+
+        if to_sandbox_dir:
+            destinations = snapshot.get_all_paths(
+                    file_types=file_types, mode='sandbox')
+        else:
+            destinations = [os.path.join(to_dir, os.path.basename(source))
+                            for source in sources]
+
+        paths = []
+        for src, dst in zip(sources, destinations):
+            if os.path.isdir(src):
+                shutil.copytree(src, dst)
+            elif os.path.isfile(src):
+                iutil.mkdirr(os.path.dirname(dst))
+                shutil.copy2(src, dst)
+            paths.append(dst)
+
+        return paths
+
+    def get_snapshot(self, **kwargs):
+        kwargs['context'] = self._context
+        return self.object.get_snapshot(**kwargs)
+    get_snapshot.__doc__ = _server.TacticObjectServer.get_snapshot.__doc__
 
 
 class SObject(object):
@@ -245,6 +303,30 @@ class SObject(object):
     def set_field(self, key, value):
         self.__data__[key] = value
 
+    def get_snapshot_filters(self):
+        skey = self.search_key
+        stype, params = skey.split('?')
+        params = dict([tuple(x.split('=')) for x in params.split('&')])
+
+        if 'project' in params:
+            project = params.get('project')
+            filters = [('search_type', '%s?project=%s' % (stype, project))]
+            filters.append(('project_code', params.get('project')))
+        else:
+            filters = [('search_type', self.__stype__)]
+        if 'code' in params:
+            filters.append(('search_code', params.get('code')))
+        if 'id' in params:
+            filters.append(('search_id', 'id'))
+        return filters
+
+    def query_snapshots(self, **kwargs):
+        filters = kwargs.get('filters', [])
+        filters.extend(self.get_snapshot_filters())
+        return self.conn.query_snapshots(
+                filters=filters, include_paths=True, include_paths_dict=True,
+                include_files=True, include_parent=True)
+
     @classmethod
     def query(cls, filters=[], columns=[], order_bys=[], show_retired=False,
               limit=None, offset=None, single=False):
@@ -268,6 +350,12 @@ class SObject(object):
     @classmethod
     def get_column_names(cls):
         return cls.conn.get_column_names(cls.__stype__)
+
+    def get_project_from_search_key(self):
+        match = re.search(r'(?<=\?project=)[^&]*(?=&)', self.search_key)
+        if match:
+            return match.group()
+        return ''
 
     def get_by_search_key(self):
         obj = self.conn.get_by_search_key(self.search_key)

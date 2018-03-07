@@ -1,4 +1,5 @@
 import re
+import abc
 
 from .. import base
 from .. import sthpw
@@ -41,6 +42,24 @@ class Asset(ProjectSObject):
     type = base.ParentSObject('vfx/asset_type', 'asset_type')
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
+    @property
+    def episodes(self):
+        return self.conn.eval(
+                '@SOBJECT(vfx/asset_in_episode.vfx/episode)',
+                self.search_key)
+
+    @property
+    def sequences(self):
+        return self.conn.eval(
+                '@SOBJECT(vfx/asset_in_sequence.vfx/sequence)',
+                self.search_key)
+
+    @property
+    def shots(self):
+        return self.conn.eval(
+                '@SOBJECT(vfx/asset_in_shot.vfx/shot)',
+                self.search_key)
+
 
 class Texture(ProjectSObject):
     __stype__ = 'vfx/texture'
@@ -59,20 +78,42 @@ class ProductionElement(ProjectSObject):
     '''Production Element Class'''
     sort_order = base.SObjectField('sort_order')
 
+    @abc.abstractproperty
+    def __prod_asset_stype__(self):
+        return ''
+
+    @property
+    def assets(self):
+        return self.conn.eval(
+                '@SOBJECT(%s.vfx/asset)' % (self.__prod_asset_stype__),
+                self.search_key)
+
 
 class Episode(ProductionElement):
     __stype__ = 'vfx/episode'
+    __prod_asset_stype__ = 'vfx/asset_in_episode'
+
+    sequences = base.ChildSObject('vfx/sequence')
+
+    @property
+    def shots(self):
+        return self.conn.eval(
+                '@SOBJECT(vfx/sequence.vfx/shot)',
+                self.search_key)
 
 
 class Sequence(ProductionElement):
     __stype__ = 'vfx/sequence'
+    __prod_asset_stype__ = 'vfx/asset_in_sequence'
 
     episode_code = base.SObjectField('episode')
     episode = base.ParentSObject('vfx/episode', 'episode_code')
+    shots = base.ChildSObject('vfx/shot')
 
 
 class Shot(ProductionElement):
     __stype__ = 'vfx/shot'
+    __prod_asset_stype__ = 'vfx/asset_in_shot'
 
     tc_frame_end = base.SObjectField('tc_frame_end')
     type = base.SObjectField('type')
@@ -109,29 +150,29 @@ class ProductionAsset(ProjectSObject):
 
 class AssetInEpisode(ProductionAsset):
     __stype__ = 'vfx/asset_in_episode'
-    __prod_type__ = 'vfx/episode'
+    __prod_stype__ = 'vfx/episode'
 
     episode_code = base.SObjectField('episode_code')
-    prod_elem = episode = base.ParentSObject(__prod_type__, 'episode_code')
+    prod_elem = episode = base.ParentSObject(__prod_stype__, 'episode_code')
 
 
 class AssetInSequence(ProductionAsset):
     __stype__ = 'vfx/asset_in_sequence'
-    __prod_type__ = 'vfx/sequence'
+    __prod_stype__ = 'vfx/sequence'
 
     sequence_code = base.SObjectField('sequence_code')
-    prod_elem = sequence = base.ParentSObject(__prod_type__, 'sequence_code')
+    prod_elem = sequence = base.ParentSObject(__prod_stype__, 'sequence_code')
 
 
 class AssetInShot(ProductionAsset, ProjectUserSObject):
     __stype__ = 'vfx/asset_in_shot'
-    __prod_type__ = 'vfx/shot'
+    __prod_stype__ = 'vfx/shot'
 
     shot_code = base.SObjectField('shot_code')
     pipeline_code = base.SObjectField('pipeline_code')
     type = base.SObjectField('type')
 
-    prod_elem = shot = base.ParentSObject(__prod_type__, 'shot_code')
+    prod_elem = shot = base.ParentSObject(__prod_stype__, 'shot_code')
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
 

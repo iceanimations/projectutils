@@ -51,7 +51,7 @@ class Process(base.SObject):
 
 
 class Translation(sthpw.UserRelatedSObject):
-    __stype__ = 'config/process'
+    __stype__ = 'config/translation'
 
     en = base.SObjectField('en')
     fr = base.SObjectField('fr')

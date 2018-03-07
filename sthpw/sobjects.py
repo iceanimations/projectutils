@@ -1,6 +1,8 @@
 from .. import base
 from .. import server as _server
 
+import os
+
 
 class ProjectRelatedSObject(base.SObject):
     project = base.ParentSObject('sthpw/project', 'project_code')
@@ -68,15 +70,59 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     get_all_paths.__doc__ = \
         _server.TacticObjectServer.get_all_paths_from_snapshot.__doc__
 
-    def query(self, *args, **kwargs):
-        return self.conn.query_snapshots(
-                *args, include_paths=True, include_paths_dict=True,
+    def query(cls, **kwargs):
+        return cls.conn.query_snapshots(
+                include_paths=True, include_paths_dict=True,
                 include_parent=True, include_files=True, **kwargs)
-    query.__doc__ = _server.TacticObjectServer.query_snapshots
+    query.__doc__ = _server.TacticObjectServer.query_snapshots.__doc__
+    query = classmethod(query)
 
     def get_preallocated_path(self, *args, **kwargs):
         return self.conn.get_preallocated_path(self.code, *args, **kwargs)
-    get_preallocated_path.__doc__ = _server.TacticObjectServer.__doc__
+    get_preallocated_path.__doc__ = \
+        _server.TacticObjectServer.get_preallocated_path.__doc__
+
+    def set_current(self):
+        self.conn.set_current_snapshot(self.code)
+    set_current.__doc__ = \
+        _server.TacticObjectServer.set_current_snapshot.__doc__
+
+    def copy_to(self, snapshot_to, mode='copy', exclude_types=None):
+        if exclude_types is None:
+            exclude_types = []
+        server = self.conn
+        dirs = []
+        groups = []
+        files = []
+        ftypes = []
+        base_dir = server.get_base_dirs()['win32_client_repo_dir']
+
+        for fileEntry in self.files:
+            file_path = os.path.join(
+                    base_dir, fileEntry.relative_dir, fileEntry.file_name
+                    ).replace('/', '\\')
+            file_type = fileEntry.type
+
+            if file_type in exclude_types:
+                continue
+
+            if fileEntry['base_type'] == 'file':
+                files.append(file_path)
+                ftypes.append(file_type)
+            elif fileEntry['base_type'] == 'directory':
+                dirs.append((file_path, file_type))
+            elif fileEntry['base_type'] == 'sequence':
+                groups.append((file_path, fileEntry['file_range'], file_type))
+
+        server.add_file(
+                snapshot_to.code, files, file_type=ftypes, mode=mode,
+                create_icon=False)
+        for directory in dirs:
+            server.add_directory(
+                    snapshot_to.code, directory[0], file_type=directory[1],
+                    mode=mode)
+        for group in groups:
+            server.add_group(snapshot_to.code, group[1], group[0], mode=mode)
 
 
 class File(NonProjectSObject, ProjectRelatedSObject):
@@ -197,18 +243,26 @@ class Project(base.SObject):
     node_naming_cls = base.SObjectField('node_naming_cls')
     initials = base.SObjectField('initials')
 
-    files = base.ChildSObject('sthpw/file')
-    groups = base.ChildSObject('sthpw/login_group')
-    milestones = base.ChildSObject('sthpw/milestone')
-    tasks = base.ChildSObject('sthpw/task')
-    work_hours = base.ChildSObject('sthpw/work_hour')
-    status_logs = base.ChildSObject('sthpw/status_log')
-    connection = base.ChildSObject('sthpw/connection')
-    triggers = base.ChildSObject('sthpw/trigger')
-    notifications = base.ChildSObject('sthpw/notification')
-    translations = base.ChildSObject('sthpw/translation')
-    schemas = base.ChildSObject('sthpw/schema')
-    pipelines = base.ChildSObject('sthpw/pipeline')
+    project_files = base.ChildSObject('sthpw/file')
+    project_groups = base.ChildSObject('sthpw/login_group')
+    project_milestones = base.ChildSObject('sthpw/milestone')
+    project_tasks = base.ChildSObject('sthpw/task')
+    project_work_hours = base.ChildSObject('sthpw/work_hour')
+    project_status_logs = base.ChildSObject('sthpw/status_log')
+    project_connection = base.ChildSObject('sthpw/connection')
+    project_triggers = base.ChildSObject('sthpw/trigger')
+    project_notifications = base.ChildSObject('sthpw/notification')
+    project_translations = base.ChildSObject('sthpw/translation')
+    project_schemas = base.ChildSObject('sthpw/schema')
+    project_pipelines = base.ChildSObject('sthpw/pipeline')
+
+    @property
+    def project_snapshots(self):
+        return self.conn.Snapshot.query(filters=[('project_code', 'code')])
+
+    @property
+    def project_files(self):
+        return self.conn.File.query(filters=[('project_code', 'code')])
 
     @property
     def checkins(self):
@@ -220,6 +274,17 @@ class Project(base.SObject):
     @classmethod
     def get_current(cls):
         return cls.get_by_code(cls.conn.project_code)
+
+    @classmethod
+    def get_all(cls):
+        projects = cls.query()
+        map(projects.pop,
+            [ind for ind in reversed(range(len(projects)))
+                if (projects[ind].code in ['admin', 'sthpw'] or
+                    projects[ind].is_template or
+                    projects[ind].category == 'Sample Projects') and
+                not projects[ind]['code'] == 'vfx'])
+        return projects
 
 
 class Login(base.SObject):
@@ -245,6 +310,8 @@ class Login(base.SObject):
     location = base.SObjectField('location')
 
     snapshots = base.ChildSObject('sthpw/snapshot')
+    assigned_tasks = base.RelatedSObject('sthpw/task', key='assigned')
+    supervisor_tasks = base.RelatedSObject('sthpw/task', key='supervisor')
 
     @classmethod
     def get_me(cls):
@@ -417,6 +484,8 @@ class Schema(ProjectRelatedSObject):
 
 
 class Pipeline(ProjectRelatedSObject):
+    __stype__ = 'sthpw/pipeline'
+
     pipeline = base.SObjectField('pipeline')
     search_type = base.SObjectField('search_type')
     description = base.SObjectField('description')
