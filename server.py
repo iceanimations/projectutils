@@ -1,4 +1,6 @@
+import iutil.symlinks as symlinks
 from auth import user as USER
+import os
 
 
 _server = None
@@ -57,6 +59,8 @@ class TacticObjectServer(USER.TacticServer):
     __metaclass__ = TacticObjectServerMeta
 
     _sobject_classes = {}
+    _maps = None
+    do_path_translation = True
 
     def __new__(cls, obj, *args, **kwargs):
         new_obj = super(TacticObjectServer, cls).__new__(cls, *args, **kwargs)
@@ -64,7 +68,9 @@ class TacticObjectServer(USER.TacticServer):
         return new_obj
 
     def create_copy(self):
-        return TacticObjectServer(USER.get_server_copy())
+        server = TacticObjectServer(USER.get_server_copy())
+        server.do_path_translation = server.do_path_translation
+        return server
 
     @classmethod
     def register_sobject_class(cls, sobj_cls):
@@ -115,6 +121,21 @@ class TacticObjectServer(USER.TacticServer):
 
     def __getattr__(self, name):
         return getattr(self.real_server, name)
+
+    def _getSymlinkMapping(self):
+        if self.server:
+            self._maps = symlinks.getSymlinks(self.server.get_base_dirs(
+            )['win32_client_repo_dir'])
+
+    def translatePath(self, path, reverse=False):
+        if not self.do_path_translation and not os.name == 'nt':
+            return path
+        if not self._maps:
+            self._getSymlinkMapping()
+        if self.server:
+            return symlinks.translatePath(
+                path, maps=self._maps, reverse=reverse)
+        return path
 
 
 class Connection(object):

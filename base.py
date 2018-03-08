@@ -145,6 +145,22 @@ class SObjectField(object):
                 self.__key__, obj.__stype__))
 
 
+class PathField(SObjectField):
+
+    def __get__(self, obj, cls):
+        value = super(PathField, self).__get__(obj, cls)
+        conn = obj.conn
+        if isinstance(value, basestring):
+            value = conn.translatePath(value)
+        elif isinstance(value, list):
+            value = [conn.translatePath(v) for v in value]
+        elif isinstance(value, tuple):
+            value = tuple([conn.translatePath(v) for v in value])
+        elif isinstance(value, dict):
+            value = {k: conn.translatePath(v) for k, v in value.items()}
+        return value
+
+
 class CachedObjectField(object):
     __stype__ = ''
     __key__ = None
@@ -247,6 +263,31 @@ class Context(object):
         kwargs['context'] = self._context
         return self.object.get_snapshot(**kwargs)
     get_snapshot.__doc__ = _server.TacticObjectServer.get_snapshot.__doc__
+
+    def create_snapshot(self, **kwargs):
+        return self._sobject.conn.create_snapshot(
+                self._sobject.search_key, self._context, **kwargs)
+    create_snapshot.__doc__ = \
+        _server.TacticObjectServer.create_snapshot.__doc__
+
+    def simple_checkin(self, file_path, **kwargs):
+        return self._sobject.conn.simple_checkin(
+                self._sobject.search_key, self._context, file_path, **kwargs)
+    simple_checkin.__doc__ = \
+        _server.TacticObjectServer.simple_checkin.__doc__
+
+    def group_checkin(self, file_path, file_range, **kwargs):
+        return self._sobject.conn.group_checkin(
+                self._sobject.search_key, self._context, file_path, file_range,
+                **kwargs)
+    group_checkin.__doc__ = \
+        _server.TacticObjectServer.group_checkin.__doc__
+
+    def directory_checkin(self, dir, **kwargs):
+        return self._sobject.conn.directory_checkin(
+                self._sobject.search_key, self._context, dir, **kwargs)
+    directory_checkin.__doc__ = \
+        _server.TacticObjectServer.directory_checkin.__doc__
 
 
 class SObject(object):
@@ -420,6 +461,8 @@ class SObject(object):
             _server.TacticObjectServer.get_connected_sobjects)
     get_virtual_snapshot_path = FuncOverride(
             _server.TacticObjectServer.get_virtual_snapshot_path)
+    add_initial_tasks = FuncOverride(
+            _server.TacticObjectServer.add_initial_tasks)
 
 
 class UnknownSObject(SObject):

@@ -55,8 +55,8 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     context = base.SObjectField('context', True)
     column_name = base.SObjectField('column_name', True)
 
-    paths = base.SObjectField('__paths__')
-    paths_dict = base.SObjectField('__paths_dict__')
+    paths = base.PathField('__paths__')
+    paths_dict = base.PathField('__paths_dict__')
 
     parent_cached = base.CachedObjectField('__parent__')
     files_cached = base.CachedObjectField('__files__')
@@ -65,8 +65,10 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     files = base.ChildSObject('sthpw/file')
 
     def get_all_paths(self, *args, **kwargs):
-        return self.conn.get_all_paths_from_snapshot(
+        conn = self.conn
+        paths = conn.get_all_paths_from_snapshot(
                 self.code, *args, **kwargs)
+        return [conn.translatePath(v) for v in paths]
     get_all_paths.__doc__ = \
         _server.TacticObjectServer.get_all_paths_from_snapshot.__doc__
 
@@ -78,7 +80,8 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     query = classmethod(query)
 
     def get_preallocated_path(self, *args, **kwargs):
-        return self.conn.get_preallocated_path(self.code, *args, **kwargs)
+        path = self.conn.get_preallocated_path(self.code, *args, **kwargs)
+        return self.conn.translatePath(path)
     get_preallocated_path.__doc__ = \
         _server.TacticObjectServer.get_preallocated_path.__doc__
 
@@ -88,14 +91,20 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
         _server.TacticObjectServer.set_current_snapshot.__doc__
 
     def copy_to(self, snapshot_to, mode='copy', exclude_types=None):
+        if not isinstance(snapshot_to, Snapshot):
+            raise ValueError('%r is not a Snapshot instance')
         if exclude_types is None:
             exclude_types = []
         server = self.conn
+
         dirs = []
         groups = []
         files = []
         ftypes = []
-        base_dir = server.get_base_dirs()['win32_client_repo_dir']
+
+        base_dir_key = 'win32' if os.name == 'nt' else 'linux'
+        base_dir_key += '_client_repo_dir'
+        base_dir = server.get_base_dirs()[base_dir_key]
 
         for fileEntry in self.files:
             file_path = os.path.join(
@@ -124,6 +133,43 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
         for group in groups:
             server.add_group(snapshot_to.code, group[1], group[0], mode=mode)
 
+        return snapshot_to
+
+    def add_dependency(self, file_path, **kwargs):
+        return self.conn.add_dependency(file_path, **kwargs)
+    add_dependency.__doc__ = _server.TacticObjectServer.add_dependency.__doc__
+
+    def add_dependency_by_code(self, snapshot, **kwargs):
+        code = snapshot
+        if isinstance(snapshot, Snapshot):
+            code = snapshot.code
+        return self.conn.add_dependency_by_code(
+                self.code, code, **kwargs)
+    add_dependency_by_code.__doc__ = \
+        _server.TacticObjectServer.add_dependency_by_code.__doc__
+
+    def get_dependencies(self, *args, **kwargs):
+        return self.conn.get_dependencies(self.code, *args, **kwargs)
+    get_dependencies.__doc__ = \
+        _server.TacticObjectServer.get_dependencies.__doc__
+
+    def get_all_dependencies(self, *args, **kwargs):
+        return self.conn.get_all_dependencies(self.code, *args, **kwargs)
+    get_all_dependencies.__doc__ = \
+        _server.TacticObjectServer.get_all_dependencies.__doc__
+
+    def add_file(self, file_path, **kwargs):
+        return self.conn.add_file(self.code, file_path, **kwargs)
+    add_file.__doc__ = _server.TacticObjectServer.add_file.__doc__
+
+    def add_group(self, *args, **kwargs):
+        return self.conn.add_group(self.code, *args, **kwargs)
+    add_group.__doc__ = _server.TacticObjectServer.add_group.__doc__
+
+    def add_directory(self, *args, **kwargs):
+        return self.conn.add_directory(self.code, *args, **kwargs)
+    add_directory.__doc__ = _server.TacticObjectServer.add_directory.__doc__
+
 
 class File(NonProjectSObject, ProjectRelatedSObject):
     __stype__ = 'sthpw/file'
@@ -145,7 +191,7 @@ class File(NonProjectSObject, ProjectRelatedSObject):
     checkin_dir = base.SObjectField('checkin_dir')
     md5 = base.SObjectField('md5')
     relative_dir = base.SObjectField('relative_dir')
-    source_path = base.SObjectField('source_path')
+    source_path = base.PathField('source_path')
     search_type = base.SObjectField('search_type')
     metadata_search = base.SObjectField('metadata_search')
 

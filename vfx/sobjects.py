@@ -42,6 +42,10 @@ class Asset(ProjectSObject):
     type = base.ParentSObject('vfx/asset_type', 'asset_type')
     pipeline = base.ParentSObject('sthpw/pipeline', 'pipeline_code')
 
+    episode_asset = base.ChildSObject('vfx/asset_in_episode')
+    sequence_asset = base.ChildSObject('vfx/asset_in_sequence')
+    shot_asset = base.ChildSObject('vfx/asset_in_shot')
+
     @property
     def episodes(self):
         return self.conn.eval(
