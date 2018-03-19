@@ -5,6 +5,8 @@ import os
 import iutil
 import re
 
+import UserDict
+
 from . import server as _server
 
 
@@ -33,22 +35,6 @@ class FuncOverride(object):
             return _func
         else:
             return self
-
-
-class ContextMeta(type):
-    contexts = dict()
-
-    def __new__(mcls, name, bases, namespace):
-        cls = super(ContextMeta, mcls).__new__(mcls, name, bases, namespace)
-        cls.contexts[cls._context] = cls
-        return cls
-
-    def __call__(cls, context, sobject):
-        if context in cls.contexts:
-            ccls = cls.contexts[context]
-            return type.__call__(ccls, sobject)
-        else:
-            return type.__call__(cls, context, sobject)
 
 
 class RelatedSObject(object):
@@ -150,14 +136,15 @@ class PathField(SObjectField):
     def __get__(self, obj, cls):
         value = super(PathField, self).__get__(obj, cls)
         conn = obj.conn
-        if isinstance(value, basestring):
-            value = conn.translatePath(value)
-        elif isinstance(value, list):
-            value = [conn.translatePath(v) for v in value]
-        elif isinstance(value, tuple):
-            value = tuple([conn.translatePath(v) for v in value])
-        elif isinstance(value, dict):
-            value = {k: conn.translatePath(v) for k, v in value.items()}
+        if conn.do_path_translation:
+            if isinstance(value, basestring):
+                value = conn.translatePath(value)
+            elif isinstance(value, list):
+                value = [conn.translatePath(v) for v in value]
+            elif isinstance(value, tuple):
+                value = tuple([conn.translatePath(v) for v in value])
+            elif isinstance(value, dict):
+                value = {k: conn.translatePath(v) for k, v in value.items()}
         return value
 
 
@@ -182,29 +169,54 @@ class CachedObjectField(object):
         return value
 
 
+class ContextMeta(type):
+    contexts = dict()
+
+    def __new__(mcls, name, bases, namespace):
+        cls = super(ContextMeta, mcls).__new__(mcls, name, bases, namespace)
+        inner_dict = cls.contexts.get(cls.__stype__, dict())
+        inner_dict[cls.__context__] = cls
+        cls.contexts[cls.__stype__] = inner_dict
+        return cls
+
+    def __call__(cls, context, sobject):
+        context = context.strip('/')
+        ccls = cls.get_class(context, sobject)
+        return type.__call__(ccls, context, sobject)
+
+    def get_class(cls, context, sobject):
+        inner_dict = cls.contexts.get(sobject.__stype__, cls.contexts['*'])
+        subcontexts = context.split('/')
+        for idx in reversed(range(len(subcontexts))):
+            sub_ctx = '/'.join(subcontexts[:idx+1])
+            if sub_ctx in inner_dict:
+                return inner_dict[sub_ctx]
+        return inner_dict['*']
+
+
 class Context(object):
     __metaclass__ = ContextMeta
-    _context = '*'
-
-    def __new__(cls, context, sobject):
-        return super(Context, cls).__new__(cls, context, sobject)
+    __context__ = '*'
+    __stype__ = '*'
+    __sobject__ = None
 
     def __init__(self, context, sobject):
-        self._context = context
-        self._sobject = sobject
+        self.__context__ = context
+        self.__sobject__ = sobject
 
     def __repr__(self):
-        return "Context(%s, %r)" % (self._context, self._sobject)
+        return "%s('%s', %r)" % (
+                self.__class__.__name__, self.__context__, self.__sobject__)
 
     def get_latest(self, versionless=False):
-        return self._sobject.get_snapshot(
-                context=self._context, version=-1, versionless=versionless,
+        return self.__sobject__.get_snapshot(
+                context=self.__context__, version=-1, versionless=versionless,
                 include_paths=False, include_full_xml=False,
                 include_paths_dict=False, include_web_paths_dict=False)
 
     def get_current(self, versionless=False):
-        return self._sobject.get_snapshot(
-                context=self._context, version=0, versionless=versionless,
+        return self.__sobject__.get_snapshot(
+                context=self.__context__, version=0, versionless=versionless,
                 include_paths=False, include_full_xml=False,
                 include_paths_dict=False, include_web_paths_dict=False)
 
@@ -212,23 +224,23 @@ class Context(object):
         pass
 
     def process(self):
-        return self._context.split('/')[0]
+        return self.__context__.split('/')[0]
 
     def get_process(self):
         return Context(self.process(), self.sobject)
 
     @property
     def snapshots(self):
-        filters = self._sobject.get_snapshot_filters()
-        filters.append(('context', self._context))
-        return self._sobject.conn.query_snapshots(
+        filters = self.__sobject__.get_snapshot_filters()
+        filters.append(('context', self.__context__))
+        return self.__sobject__.conn.query_snapshots(
                 filters=filters, include_files=True, include_paths=True,
                 include_paths_dict=True, include_parent=True)
 
     def checkout(self, **kwargs):
         versionless = kwargs.pop('versionless', False)
         if not versionless:
-            return self._sobject.checkout(**kwargs)
+            return self.__sobject__.checkout(**kwargs)
 
         version = kwargs.get('version', -1)
         file_types = kwargs.get('file_type', [])
@@ -236,8 +248,8 @@ class Context(object):
         to_sandbox_dir = kwargs.get('to_sandbox_dir', False)
 
         assert version in (0, -1)
-        snapshot = self._sobject.get_snapshot(
-                context=self._context, version=version, versionless=True)
+        snapshot = self.__sobject__.get_snapshot(
+                context=self.__context__, version=version, versionless=True)
         sources = snapshot.get_all_paths(
                 file_types=file_types, mode='client_repo')
 
@@ -260,37 +272,38 @@ class Context(object):
         return paths
 
     def get_snapshot(self, **kwargs):
-        kwargs['context'] = self._context
-        return self.object.get_snapshot(**kwargs)
+        kwargs['context'] = self.__context__
+        return self.__sobject__.get_snapshot(**kwargs)
     get_snapshot.__doc__ = _server.TacticObjectServer.get_snapshot.__doc__
 
     def create_snapshot(self, **kwargs):
-        return self._sobject.conn.create_snapshot(
-                self._sobject.search_key, self._context, **kwargs)
+        return self.__sobject__.conn.create_snapshot(
+                self.__sobject__.search_key, self.__context__, **kwargs)
     create_snapshot.__doc__ = \
         _server.TacticObjectServer.create_snapshot.__doc__
 
     def simple_checkin(self, file_path, **kwargs):
-        return self._sobject.conn.simple_checkin(
-                self._sobject.search_key, self._context, file_path, **kwargs)
+        return self.__sobject__.conn.simple_checkin(
+                self.__sobject__.search_key, self._context, file_path,
+                **kwargs)
     simple_checkin.__doc__ = \
         _server.TacticObjectServer.simple_checkin.__doc__
 
     def group_checkin(self, file_path, file_range, **kwargs):
-        return self._sobject.conn.group_checkin(
-                self._sobject.search_key, self._context, file_path, file_range,
-                **kwargs)
+        return self.__sobject__.conn.group_checkin(
+                self.__sobject__.search_key, self._context, file_path,
+                file_range, **kwargs)
     group_checkin.__doc__ = \
         _server.TacticObjectServer.group_checkin.__doc__
 
     def directory_checkin(self, dir, **kwargs):
-        return self._sobject.conn.directory_checkin(
-                self._sobject.search_key, self._context, dir, **kwargs)
+        return self.__sobject__.conn.directory_checkin(
+                self.__sobject__.search_key, self._context, dir, **kwargs)
     directory_checkin.__doc__ = \
         _server.TacticObjectServer.directory_checkin.__doc__
 
 
-class SObject(object):
+class SObject(object, UserDict.UserDict):
     __metaclass__ = SObjectMeta
     __data__ = None
 
@@ -367,6 +380,17 @@ class SObject(object):
         return self.conn.query_snapshots(
                 filters=filters, include_paths=True, include_paths_dict=True,
                 include_files=True, include_parent=True)
+
+    def get_snapshot(self, *args, **kwargs):
+        kwargs['include_paths'] = True
+        kwargs['include_paths_dict'] = True
+        kwargs['include_files'] = True
+        kwargs['include_web_paths_dict'] = True
+        return self.conn.get_snapshot(self.search_key, *args, **kwargs)
+    get_snapshot.__doc__ = _server.TacticObjectServer.get_snapshot.__doc__
+
+    def copy(self, conn=None):
+        return self.__class__(self.data, conn or self.conn)
 
     @classmethod
     def query(cls, filters=[], columns=[], order_bys=[], show_retired=False,
@@ -449,8 +473,6 @@ class SObject(object):
             _server.TacticObjectServer.directory_checkin)
     checkout = FuncOverride(
             _server.TacticObjectServer.checkout)
-    get_snapshot = FuncOverride(
-            _server.TacticObjectServer.get_snapshot)
     get_parent = FuncOverride(
             _server.TacticObjectServer.get_parent)
     get_all_children = FuncOverride(

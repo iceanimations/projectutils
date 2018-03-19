@@ -60,6 +60,8 @@ class TacticObjectServer(USER.TacticServer):
 
     _sobject_classes = {}
     _maps = None
+    _base_dir = None
+
     do_path_translation = True
 
     def __new__(cls, obj, *args, **kwargs):
@@ -115,6 +117,16 @@ class TacticObjectServer(USER.TacticServer):
             return [_class for stype, _class in cls._sobject_classes.items() if
                     stype.startswith(namespace + '/')]
 
+    @property
+    def base_dir(self):
+        if self._base_dir is not None:
+            return self._base_dir
+        else:
+            key = 'win32' if os.name == 'nt' else 'linux'
+            key += '_client_repo_dir'
+            self._base_dir = self.get_base_dirs()[key]
+        return self._base_dir
+
     @staticmethod
     def is_sobj_dict(d):
         return isinstance(d, dict) and '__search_key__' in d
@@ -123,18 +135,15 @@ class TacticObjectServer(USER.TacticServer):
         return getattr(self.real_server, name)
 
     def _getSymlinkMapping(self):
-        if self.server:
-            self._maps = symlinks.getSymlinks(self.server.get_base_dirs(
-            )['win32_client_repo_dir'])
+        self._maps = symlinks.getSymlinks(self.base_dir)
 
     def translatePath(self, path, reverse=False):
         if not self.do_path_translation and not os.name == 'nt':
             return path
         if not self._maps:
             self._getSymlinkMapping()
-        if self.server:
-            return symlinks.translatePath(
-                path, maps=self._maps, reverse=reverse)
+        path = symlinks.translatePath(
+            path, maps=self._maps, reverse=reverse)
         return path
 
 

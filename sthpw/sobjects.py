@@ -2,6 +2,7 @@ from .. import base
 from .. import server as _server
 
 import os
+import xml.etree.ElementTree as etree
 
 
 class ProjectRelatedSObject(base.SObject):
@@ -96,15 +97,14 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
         if exclude_types is None:
             exclude_types = []
         server = self.conn
+        snapshot_to = snapshot_to.copy(server)
 
         dirs = []
         groups = []
         files = []
         ftypes = []
 
-        base_dir_key = 'win32' if os.name == 'nt' else 'linux'
-        base_dir_key += '_client_repo_dir'
-        base_dir = server.get_base_dirs()[base_dir_key]
+        base_dir = server.base_dir
 
         for fileEntry in self.files:
             file_path = os.path.join(
@@ -142,6 +142,7 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     def add_dependency_by_code(self, snapshot, **kwargs):
         code = snapshot
         if isinstance(snapshot, Snapshot):
+            snapshot = snapshot.copy(self.conn)
             code = snapshot.code
         return self.conn.add_dependency_by_code(
                 self.code, code, **kwargs)
@@ -158,6 +159,17 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     get_all_dependencies.__doc__ = \
         _server.TacticObjectServer.get_all_dependencies.__doc__
 
+    def remove_dependency(self, snapshot=None, type='ref', tag='main'):
+        elem = etree.fromstring(self.snapshot)
+        xpath = "%s[@tag='%s']" % (type, tag)
+        if snapshot is not None:
+            snapshot = snapshot.copy(self.conn)
+            xpath = "%s[@snapshot_code='%s']" % snapshot.code
+        for child in elem.findall(xpath):
+            elem.remove(child)
+        self.snapshot = etree.dump(elem)
+        return self.snapshot.update()
+
     def add_file(self, file_path, **kwargs):
         return self.conn.add_file(self.code, file_path, **kwargs)
     add_file.__doc__ = _server.TacticObjectServer.add_file.__doc__
@@ -169,6 +181,10 @@ class Snapshot(NonProjectSObject, UserRelatedSObject, ProjectRelatedSObject):
     def add_directory(self, *args, **kwargs):
         return self.conn.add_directory(self.code, *args, **kwargs)
     add_directory.__doc__ = _server.TacticObjectServer.add_directory.__doc__
+
+    def get_context(self):
+        return base.Context(
+                self.context, self.parent_cached or self.get_parent())
 
 
 class File(NonProjectSObject, ProjectRelatedSObject):
@@ -199,6 +215,11 @@ class File(NonProjectSObject, ProjectRelatedSObject):
     def parent_snapshot(self):
         return self.conn.Snapshot.query(
                 filters=[('code', self.snapshot_code)], single=True)
+
+    def get_path(self):
+        path = os.path.join(
+                self.conn.base_dir, self.relative_dir, self.file_name)
+        return self.conn.translatePath(path)
 
 
 class Milestone(ProjectRelatedSObject):
