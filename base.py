@@ -8,6 +8,7 @@ import re
 import UserDict
 
 from . import server as _server
+from . import dependencies
 
 
 class SObjectMeta(ABCMeta):
@@ -199,6 +200,9 @@ class Context(object):
     __context__ = '*'
     __stype__ = '*'
     __sobject__ = None
+
+    default_targets = dependencies.DefaultDependency(direction='forward')
+    default_sources = dependencies.DefaultDependency(direction='backward')
 
     def __init__(self, context, sobject):
         self.__context__ = context
