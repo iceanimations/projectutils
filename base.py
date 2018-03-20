@@ -225,7 +225,7 @@ class Context(object):
                 include_paths_dict=False, include_web_paths_dict=False)
 
     def has_versionless(self):
-        pass
+        raise NotImplementedError('will be implemented later')
 
     def process(self):
         return self.__context__.split('/')[0]
