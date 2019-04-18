@@ -272,8 +272,8 @@ class Context(object):
                 iutil.mkdirr(os.path.dirname(dst))
                 shutil.copy2(src, dst)
             paths.append(dst)
-
         return paths
+    checkout.__doc__ = _server.TacticObjectServer.checkout.__doc__
 
     def get_snapshot(self, **kwargs):
         kwargs['context'] = self.__context__
