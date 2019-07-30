@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractproperty
 import functools
 import shutil
 import os
-import iutil
+import nebula.common.util as iutil
 import re
 
 import UserDict
@@ -158,7 +158,7 @@ class CachedObjectField(object):
         self.__type__ = stype
 
     def __get__(self, obj, cls):
-        value = obj.data[self.__key__]
+        value = obj.data.get(self.__key__)
         if obj.conn.is_sobj_dict(value):
             value = obj.conn.wrap_sobject_class(
                     value, obj.conn)
